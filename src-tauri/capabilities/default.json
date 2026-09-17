@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "默认权限。文件读写不经 tauri-plugin-fs 的路径作用域，而由 project_fs 自定义命令在 Rust 侧强制「必须落在工程根目录内」——调用方无法通过 .. 或绝对路径越界。",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open"
+  ]
+}

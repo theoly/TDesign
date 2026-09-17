@@ -1,0 +1,36 @@
+/* PC 专属基座样式 (A1 / T-AE-07)
+   仅在 deviceProfile === 'pc' 的工程中注入；移动端白名单中不出现这些类。
+   参见 doc/aesthetic/spec.md 第四章 PC / Mobile 设备美学对照。 */
+
+/* 内容最大宽度容器。1440px 画框下内容横向拉通是 PC 生成页最高频的丑因，
+   一切页面级内容都应包裹在此容器内居中。 */
+.container-max {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 悬浮态：移动端无 hover，故这些类只在 PC 档位存在 */
+.card-hover {
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.card-hover:hover {
+  box-shadow: 0 8px 28px -4px rgba(15, 23, 42, 0.10), 0 3px 8px -2px rgba(15, 23, 42, 0.06);
+  transform: translateY(-2px);
+}
+
+.row-hover {
+  transition: background-color 120ms ease;
+}
+.row-hover:hover {
+  background-color: var(--color-surface-alt, #f1f5f9);
+}
+
+.link-hover {
+  color: var(--color-primary, #2563eb);
+  cursor: pointer;
+}
+.link-hover:hover {
+  text-decoration: underline;
+}

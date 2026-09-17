@@ -1,0 +1,407 @@
+/* ==========================================================================
+   AI Designer Studio - Token-Based Base Stylesheet (base.css)
+   Built purely on CSS variables. Zero literal colors or arbitrary hardcoded scales.
+   This file is injected into every design frame and can be evolved via AI dialogue.
+   ========================================================================== */
+
+/* 1. Reset & Box Model */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  background-color: var(--color-bg, #f8fafc);
+  color: var(--color-text-primary, #0f172a);
+  font-size: var(--font-size-md, 16px);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 2. Layout Primitives (Flex & Grid) */
+.row {
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.wrap { flex-wrap: wrap; }
+.nowrap { flex-wrap: nowrap; }
+.flex-1 { flex: 1 1 0%; }
+.flex-auto { flex: 1 1 auto; }
+.flex-none { flex: none; }
+
+.items-start { align-items: flex-start; }
+.items-center { align-items: center; }
+.items-end { align-items: flex-end; }
+.items-baseline { align-items: baseline; }
+.items-stretch { align-items: stretch; }
+
+.justify-start { justify-content: flex-start; }
+.justify-center { justify-content: center; }
+.justify-end { justify-content: flex-end; }
+.justify-between { justify-content: space-between; }
+.justify-around { justify-content: space-around; }
+
+.grid-1 { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.grid-6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
+/* 3. Spacing Ladder (Base 4px) */
+.gap-0 { gap: var(--space-0, 0px); }
+.gap-1 { gap: var(--space-1, 4px); }
+.gap-2 { gap: var(--space-2, 8px); }
+.gap-3 { gap: var(--space-3, 12px); }
+.gap-4 { gap: var(--space-4, 16px); }
+.gap-5 { gap: var(--space-5, 20px); }
+.gap-6 { gap: var(--space-6, 24px); }
+.gap-8 { gap: var(--space-8, 32px); }
+
+.p-0 { padding: var(--space-0, 0px); }
+.p-1 { padding: var(--space-1, 4px); }
+.p-2 { padding: var(--space-2, 8px); }
+.p-3 { padding: var(--space-3, 12px); }
+.p-4 { padding: var(--space-4, 16px); }
+.p-5 { padding: var(--space-5, 20px); }
+.p-6 { padding: var(--space-6, 24px); }
+.p-8 { padding: var(--space-8, 32px); }
+
+.px-0 { padding-left: var(--space-0, 0px); padding-right: var(--space-0, 0px); }
+.px-1 { padding-left: var(--space-1, 4px); padding-right: var(--space-1, 4px); }
+.px-2 { padding-left: var(--space-2, 8px); padding-right: var(--space-2, 8px); }
+.px-3 { padding-left: var(--space-3, 12px); padding-right: var(--space-3, 12px); }
+.px-4 { padding-left: var(--space-4, 16px); padding-right: var(--space-4, 16px); }
+.px-5 { padding-left: var(--space-5, 20px); padding-right: var(--space-5, 20px); }
+.px-6 { padding-left: var(--space-6, 24px); padding-right: var(--space-6, 24px); }
+.px-8 { padding-left: var(--space-8, 32px); padding-right: var(--space-8, 32px); }
+
+.py-0 { padding-top: var(--space-0, 0px); padding-bottom: var(--space-0, 0px); }
+.py-1 { padding-top: var(--space-1, 4px); padding-bottom: var(--space-1, 4px); }
+.py-2 { padding-top: var(--space-2, 8px); padding-bottom: var(--space-2, 8px); }
+.py-3 { padding-top: var(--space-3, 12px); padding-bottom: var(--space-3, 12px); }
+.py-4 { padding-top: var(--space-4, 16px); padding-bottom: var(--space-4, 16px); }
+.py-5 { padding-top: var(--space-5, 20px); padding-bottom: var(--space-5, 20px); }
+.py-6 { padding-top: var(--space-6, 24px); padding-bottom: var(--space-6, 24px); }
+.py-8 { padding-top: var(--space-8, 32px); padding-bottom: var(--space-8, 32px); }
+
+.m-0 { margin: var(--space-0, 0px); }
+.m-1 { margin: var(--space-1, 4px); }
+.m-2 { margin: var(--space-2, 8px); }
+.m-3 { margin: var(--space-3, 12px); }
+.m-4 { margin: var(--space-4, 16px); }
+.m-5 { margin: var(--space-5, 20px); }
+.m-6 { margin: var(--space-6, 24px); }
+.m-8 { margin: var(--space-8, 32px); }
+
+.mt-0 { margin-top: var(--space-0, 0px); }
+.mt-1 { margin-top: var(--space-1, 4px); }
+.mt-2 { margin-top: var(--space-2, 8px); }
+.mt-3 { margin-top: var(--space-3, 12px); }
+.mt-4 { margin-top: var(--space-4, 16px); }
+.mt-5 { margin-top: var(--space-5, 20px); }
+.mt-6 { margin-top: var(--space-6, 24px); }
+.mt-8 { margin-top: var(--space-8, 32px); }
+
+.mb-0 { margin-bottom: var(--space-0, 0px); }
+.mb-1 { margin-bottom: var(--space-1, 4px); }
+.mb-2 { margin-bottom: var(--space-2, 8px); }
+.mb-3 { margin-bottom: var(--space-3, 12px); }
+.mb-4 { margin-bottom: var(--space-4, 16px); }
+.mb-5 { margin-bottom: var(--space-5, 20px); }
+.mb-6 { margin-bottom: var(--space-6, 24px); }
+.mb-8 { margin-bottom: var(--space-8, 32px); }
+
+/* 4. Typography Ladder */
+.text-xs { font-size: var(--font-size-xs, 12px); line-height: 1.33; }
+.text-sm { font-size: var(--font-size-sm, 14px); line-height: 1.42; }
+.text-md { font-size: var(--font-size-md, 16px); line-height: 1.5; }
+.text-lg { font-size: var(--font-size-lg, 18px); line-height: 1.55; }
+.text-xl { font-size: var(--font-size-xl, 20px); line-height: 1.4; }
+.text-2xl { font-size: var(--font-size-2xl, 24px); line-height: 1.33; }
+.text-3xl { font-size: var(--font-size-3xl, 30px); line-height: 1.25; }
+.text-4xl { font-size: var(--font-size-4xl, 36px); line-height: 1.2; }
+
+.font-normal { font-weight: 400; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.text-primary { color: var(--color-primary, #2563eb); }
+.text-secondary { color: var(--color-text-secondary, #475569); }
+.text-muted { color: var(--color-text-muted, #94a3b8); }
+.text-inverse { color: #ffffff; }
+.text-success { color: var(--color-success, #16a34a); }
+.text-warning { color: var(--color-warning, #d97706); }
+.text-danger { color: var(--color-danger, #dc2626); }
+
+/* 5. Surfaces, Backgrounds & Borders */
+.bg-surface { background-color: var(--color-surface, #ffffff); }
+.bg-surface-alt { background-color: var(--color-surface-alt, #f1f5f9); }
+.bg-primary { background-color: var(--color-primary, #2563eb); color: #ffffff; }
+.bg-primary-light { background-color: var(--color-primary-light, #dbeafe); color: var(--color-primary, #2563eb); }
+.bg-accent { background-color: var(--color-accent, #7c3aed); color: #ffffff; }
+.bg-accent-light { background-color: var(--color-accent-light, #ede9fe); color: var(--color-accent, #7c3aed); }
+.bg-success-light { background-color: var(--color-success-light, #dcfce7); color: var(--color-success, #16a34a); }
+.bg-warning-light { background-color: var(--color-warning-light, #fef3c7); color: var(--color-warning, #d97706); }
+.bg-danger-light { background-color: var(--color-danger-light, #fee2e2); color: var(--color-danger, #dc2626); }
+
+.border { border: 1px solid var(--color-border, #e2e8f0); }
+.border-b { border-bottom: 1px solid var(--color-border, #e2e8f0); }
+.border-t { border-top: 1px solid var(--color-border, #e2e8f0); }
+.border-l { border-left: 1px solid var(--color-border, #e2e8f0); }
+.border-r { border-right: 1px solid var(--color-border, #e2e8f0); }
+
+.divider {
+  height: 1px;
+  background-color: var(--color-border, #e2e8f0);
+  margin: var(--space-3, 12px) 0;
+}
+
+/* 6. Shapes & Radii */
+.r-none { border-radius: var(--radius-none, 0px); }
+.r-sm { border-radius: var(--radius-sm, 4px); }
+.r-md { border-radius: var(--radius-md, 8px); }
+.r-lg { border-radius: var(--radius-lg, 12px); }
+.r-xl { border-radius: var(--radius-xl, 16px); }
+.r-full { border-radius: var(--radius-full, 9999px); }
+
+/* 7. Shadows */
+.shadow-none { box-shadow: none; }
+.shadow-sm { box-shadow: var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05)); }
+.shadow-md { box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)); }
+.shadow-lg { box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)); }
+
+/* 8. Component Primitives */
+.card {
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  overflow: hidden;
+}
+
+.panel {
+  background-color: var(--color-surface-alt, #f1f5f9);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-4, 16px);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2, 8px);
+  font-family: inherit;
+  font-size: var(--font-size-sm, 14px);
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:hover { opacity: 0.9; }
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: var(--font-size-xs, 12px);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.btn-lg {
+  padding: 12px 24px;
+  font-size: var(--font-size-md, 16px);
+  border-radius: var(--radius-lg, 12px);
+}
+
+.btn-primary {
+  background-color: var(--color-primary, #2563eb);
+  color: #ffffff;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--color-text-secondary, #475569);
+  border-color: var(--color-border, #e2e8f0);
+}
+
+.btn-ghost:hover {
+  background-color: var(--color-surface-alt, #f1f5f9);
+}
+
+.input, .select {
+  font-family: inherit;
+  font-size: var(--font-size-sm, 14px);
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--color-surface, #ffffff);
+  color: var(--color-text-primary, #0f172a);
+  outline: none;
+  width: 100%;
+}
+
+.input:focus, .select:focus {
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 2px var(--color-primary-light, #dbeafe);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full, 9999px);
+  overflow: hidden;
+  display: inline-block;
+  background-color: var(--color-surface-alt, #f1f5f9);
+}
+
+.avatar img, .full-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.icon {
+  display: inline-block;
+  vertical-align: middle;
+  stroke: currentColor;
+  fill: none;
+}
+
+/* 9. Utility Modifiers */
+.overflow-hidden { overflow: hidden; }
+.sticky-top { position: sticky; top: 0; z-index: 10; }
+.cursor-pointer { cursor: pointer; }
+.leading-relaxed { line-height: 1.625; }
+
+/* 10. Micro-texture System (A1 / T-AE-06)
+   赋予界面现代质感的复合原子类。此处的阴影/模糊为字面量，
+   A2 完成 Token Schema 扩展后改为 var(--shadow-soft) 等引用
+   （doc/aesthetic/spec.md §2.1 落地顺序说明）。 */
+
+/* 10.1 复合微阴影：环境光 + 主光源两层叠加，比单层阴影自然。
+   A2 起由 Token 驱动，随主题预设的阴影性格与 colorMode 变化。 */
+.shadow-soft { box-shadow: var(--shadow-soft, 0 4px 20px -2px rgba(15, 23, 42, 0.06)); }
+.shadow-card { box-shadow: var(--shadow-card, 0 1px 3px 0 rgba(15, 23, 42, 0.07)); }
+.shadow-glow { box-shadow: var(--shadow-glow, 0 0 0 1px rgba(37, 99, 235, 0.25)); }
+
+/* 10.2 微质感表面 */
+/* 微质感边框：borderAlpha 让边框不再是生硬实线 */
+.surface-subtle {
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-subtle, var(--color-border, #e2e8f0));
+}
+.glass {
+  backdrop-filter: blur(var(--blur-md, 16px));
+  -webkit-backdrop-filter: blur(var(--blur-md, 16px));
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-subtle, var(--color-border, #e2e8f0));
+}
+.border-subtle { border: 1px solid var(--color-border-subtle, var(--color-border, #e2e8f0)); }
+
+/* 10.3 复合组件模式 */
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  padding: 0 var(--space-3, 12px);
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+}
+.input-group > .input {
+  flex: 1 1 0%;
+  padding-left: 0;
+  padding-right: 0;
+  border: none;
+  background: transparent;
+}
+.input-group > .icon {
+  color: var(--color-text-secondary, #475569);
+  flex: none;
+}
+
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  padding: 2px var(--space-2, 8px);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 600;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--color-surface-alt, #f1f5f9);
+  color: var(--color-text-secondary, #475569);
+}
+
+.divider-text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-text-muted, #94a3b8);
+}
+.divider-text::before,
+.divider-text::after {
+  content: "";
+  flex: 1 1 0%;
+  height: 1px;
+  background-color: var(--color-border, #e2e8f0);
+}
+
+.avatar-group {
+  display: flex;
+  align-items: center;
+}
+.avatar-group > .avatar {
+  border: 2px solid var(--color-surface, #ffffff);
+  margin-left: -8px;
+}
+.avatar-group > .avatar:first-child {
+  margin-left: 0;
+}
+
+.skeleton {
+  background-color: var(--color-surface-alt, #f1f5f9);
+  border-radius: var(--radius-sm, 4px);
+}

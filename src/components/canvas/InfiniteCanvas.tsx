@@ -1,0 +1,316 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { useProjectStore } from '../../stores/useProjectStore';
+import { useHistoryStore } from '../../stores/useHistoryStore';
+import { ScreenFrame } from './ScreenFrame';
+import { Check, Copy, Map, X } from 'lucide-react';
+
+interface InfiniteCanvasProps {
+  /** T-AE-26: 单画框质感润色入口，由 App 层承接以复用 RestylePanel */
+  onPolish?: (screenId: string) => void;
+}
+
+export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [startPan, setStartPan] = useState({ x: 0, y: 0 });
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(true);
+
+  const {
+    screens,
+    screenOrder,
+    activeScreenId,
+    settings,
+    viewportTransform,
+    setViewportTransform,
+    setActiveScreen,
+    stagedScreen,
+    adoptStagedChange,
+    discardStagedChange,
+    keepBothScreens
+  } = useProjectStore();
+
+  const { x, y, scale } = viewportTransform;
+
+  // Global Keyboard Shortcuts (PRD §3.3.1 / §3.8.1)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Spacebar panning
+      if (e.code === 'Space' && !e.repeat) {
+        setIsSpacePressed(true);
+      }
+
+      // Cmd+Z / Cmd+Shift+Z (Undo / Redo)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          useHistoryStore.getState().redo();
+        } else {
+          useHistoryStore.getState().undo();
+        }
+      }
+
+      // Cmd+0: Reset zoom to 100%
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        e.preventDefault();
+        setViewportTransform({ x: 100, y: 100, scale: 1.0 });
+      }
+
+      // Cmd+= / Cmd++: Zoom In
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        setViewportTransform({ x, y, scale: Math.min(scale * 1.15, 4.0) });
+      }
+
+      // Cmd+-: Zoom Out
+      if ((e.metaKey || e.ctrlKey) && e.key === '-') {
+        e.preventDefault();
+        setViewportTransform({ x, y, scale: Math.max(scale * 0.85, 0.1) });
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [scale, x, y, setViewportTransform]);
+
+  // Mouse wheel zoom
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const zoomFactor = 1 - e.deltaY * 0.002;
+      const newScale = Math.min(Math.max(scale * zoomFactor, 0.1), 4.0);
+
+      // Zoom centered at cursor
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const newX = mouseX - (mouseX - x) * (newScale / scale);
+        const newY = mouseY - (mouseY - y) * (newScale / scale);
+        setViewportTransform({ x: newX, y: newY, scale: newScale });
+      }
+    } else {
+      // Normal 2-finger scroll panning
+      setViewportTransform({
+        x: x - e.deltaX,
+        y: y - e.deltaY,
+        scale
+      });
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (isSpacePressed || e.button === 1) { // Space or middle mouse
+      setIsPanning(true);
+      setStartPan({ x: e.clientX - x, y: e.clientY - y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      setViewportTransform({
+        x: e.clientX - startPan.x,
+        y: e.clientY - startPan.y,
+        scale
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  // Find target screen position for staged screen
+  const targetScreen = stagedScreen ? screens[stagedScreen.targetScreenId] : null;
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative w-full h-full overflow-hidden bg-slate-950 ${
+        isSpacePressed ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'
+      }`}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+    >
+      {/* Background Grid Dots */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-20"
+        style={{
+          backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)',
+          backgroundSize: `${32 * scale}px ${32 * scale}px`,
+          backgroundPosition: `${x}px ${y}px`
+        }}
+      />
+
+      {/* World Transform Layer */}
+      <div
+        className="absolute top-0 left-0 will-change-transform origin-top-left"
+        style={{
+          transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`
+        }}
+      >
+        {screenOrder.map((id) => {
+          const screen = screens[id];
+          if (!screen) return null;
+          const isActive = id === activeScreenId;
+
+          // LOD determination:
+          // scale < 0.25 -> L0
+          // isActive -> L2
+          // else -> L1
+          let lodLevel: 0 | 1 | 2 = 1;
+          if (scale < 0.25) lodLevel = 0;
+          else if (isActive) lodLevel = 2;
+
+          return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish} />;
+        })}
+
+        {/* Staged Screen (Side-by-side D17 preview) */}
+        {stagedScreen && targetScreen && (
+          <ScreenFrame
+            key="staged-screen"
+            screen={{
+              id: 'staged-screen-preview',
+              name: stagedScreen.screenName,
+              position: {
+                x: targetScreen.position.x + (targetScreen.measuredHeight ? 1560 : 1560),
+                y: targetScreen.position.y
+              },
+              htmlContent: stagedScreen.newHtml,
+              measuredHeight: targetScreen.measuredHeight
+            }}
+            lodLevel={2}
+            isStaged={true}
+          />
+        )}
+      </div>
+
+      {/* Side-by-Side Floating Adoption Toolbar (D17 / §3.2.9) */}
+      {stagedScreen && (
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
+            <span className="font-semibold text-purple-200">AI 新方案已在右侧画框并排就绪</span>
+          </div>
+          <div className="h-4 w-px bg-slate-700" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={adoptStagedChange}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition"
+            >
+              <Check className="w-4 h-4" />
+              <span>采纳新版 (替换原版)</span>
+            </button>
+            <button
+              onClick={keepBothScreens}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition"
+            >
+              <Copy className="w-4 h-4" />
+              <span>两版都留</span>
+            </button>
+            <button
+              onClick={discardStagedChange}
+              className="flex items-center gap-1 text-slate-400 hover:text-red-400 font-medium px-3 py-1.5 rounded-lg transition"
+            >
+              <X className="w-4 h-4" />
+              <span>保留原版</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Minimap (PRD §3.3.1) */}
+      <div className="absolute bottom-4 left-4 z-40 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 transition select-none">
+        <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400">
+          <div className="flex items-center gap-1.5">
+            <Map className="w-3 h-3 text-blue-400" />
+            <span>小地图 (Minimap)</span>
+          </div>
+          <button
+            onClick={() => setShowMinimap(!showMinimap)}
+            className="text-slate-500 hover:text-slate-300 transition"
+          >
+            {showMinimap ? '收起' : '展开'}
+          </button>
+        </div>
+
+        {showMinimap && (
+          <div
+            className="relative w-44 h-28 bg-slate-950/80 rounded-lg border border-slate-800/80 overflow-hidden cursor-crosshair"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const clickY = e.clientY - rect.top;
+              const targetWorldX = (clickX / rect.width) * 4000;
+              const targetWorldY = (clickY / rect.height) * 2500;
+              const cRect = containerRef.current?.getBoundingClientRect();
+              const cW = cRect ? cRect.width : 1000;
+              const cH = cRect ? cRect.height : 700;
+              setViewportTransform({
+                x: cW / 2 - targetWorldX * scale,
+                y: cH / 2 - targetWorldY * scale,
+                scale
+              });
+            }}
+          >
+            {screenOrder.map((id) => {
+              const s = screens[id];
+              if (!s) return null;
+              const isActive = id === activeScreenId;
+              const left = (s.position.x / 4000) * 100;
+              const top = (s.position.y / 2500) * 100;
+              const width = (settings.frameWidth / 4000) * 100;
+              const height = ((s.measuredHeight || 800) / 2500) * 100;
+
+              return (
+                <div
+                  key={id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveScreen(id);
+                    const cRect = containerRef.current?.getBoundingClientRect();
+                    const cW = cRect ? cRect.width : 1000;
+                    const cH = cRect ? cRect.height : 700;
+                    setViewportTransform({
+                      x: cW / 2 - (s.position.x + settings.frameWidth / 2) * scale,
+                      y: cH / 2 - (s.position.y + 400) * scale,
+                      scale
+                    });
+                  }}
+                  className={`absolute rounded-[2px] transition ${
+                    isActive
+                      ? 'bg-blue-500 ring-1 ring-blue-300 shadow'
+                      : 'bg-slate-700 hover:bg-slate-600'
+                  }`}
+                  style={{
+                    left: `${Math.max(0, Math.min(left, 90))}%`,
+                    top: `${Math.max(0, Math.min(top, 90))}%`,
+                    width: `${Math.max(width, 4)}%`,
+                    height: `${Math.max(height, 4)}%`
+                  }}
+                  title={s.name}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

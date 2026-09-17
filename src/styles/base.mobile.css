@@ -1,0 +1,92 @@
+/* 移动端专属基座样式 (A1 / T-AE-07)
+   仅在 deviceProfile === 'mobile' 的工程中注入；PC 白名单中不出现这些类。
+   参见 doc/aesthetic/spec.md 第四章 PC / Mobile 设备美学对照。 */
+
+/* 安全区：顶部状态栏 44~47px，底部 Home Indicator 34px */
+.safe-top { padding-top: 44px; }
+.safe-bottom { padding-bottom: 34px; }
+
+/* 顶部标题栏 */
+.appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  height: 44px;
+  padding-left: var(--space-4, 16px);
+  padding-right: var(--space-4, 16px);
+  background-color: var(--color-surface, #ffffff);
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+/* 底部标签导航：4~5 项，图标 + 10~11px 文字 */
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  background-color: var(--color-surface, #ffffff);
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  padding-bottom: 34px;
+}
+.tabbar > .tabbar-item {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding-top: var(--space-2, 8px);
+  padding-bottom: var(--space-2, 8px);
+  font-size: 10px;
+  color: var(--color-text-muted, #94a3b8);
+}
+.tabbar > .tabbar-item.is-active {
+  color: var(--color-primary, #2563eb);
+}
+
+/* 底部吸底主 CTA：移动端主操作的标准位置 */
+.cta-fixed {
+  display: flex;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px) calc(var(--space-3, 12px) + 34px);
+  background-color: var(--color-surface, #ffffff);
+  border-top: 1px solid var(--color-border, #e2e8f0);
+}
+.cta-fixed > .btn {
+  flex: 1 1 0%;
+  height: 48px;
+}
+
+/* 横滑卡片组：移动端需要并列内容时的替代方案（不用多列栅格） */
+.scroll-x {
+  display: flex;
+  gap: var(--space-3, 12px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+.scroll-x > * {
+  scroll-snap-align: start;
+  flex: none;
+}
+
+/* 触控尺寸：输入框 48px、最小可点区域 44x44 */
+.input-touch {
+  height: 48px;
+  font-size: var(--font-size-md, 16px);
+}
+.tap-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 列表项：移动端标准高度与分隔 */
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  min-height: 56px;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}

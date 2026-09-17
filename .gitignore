@@ -1,0 +1,10 @@
+dist/
+dist-desktop/
+doc/
+node_modules/
+scripts/
+spike/
+AGENTS.md
+bun.lock
+.env
+.env.*
