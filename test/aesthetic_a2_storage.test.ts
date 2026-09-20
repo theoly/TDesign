@@ -120,7 +120,7 @@ describe('T-AE-32 · 附件落盘，会话不存 base64', () => {
   test('dataUrl 落为 assets/ 下的文件并返回 relPath', async () => {
     const asset = await new AttachmentStore(storage).save('ref.png', PNG_1PX);
     expect(asset).not.toBeNull();
-    expect(asset!.relPath).toMatch(/^assets\/images\/asset_[a-z0-9_]+\.png$/);
+    expect(asset!.relPath).toMatch(/^assets\/images\/[a-f0-9]{32}\.png$/);
     expect(asset!.mimeType).toBe('image/png');
   });
 

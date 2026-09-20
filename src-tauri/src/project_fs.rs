@@ -148,6 +148,19 @@ pub fn project_write_binary(root: String, rel: String, base64_data: String) -> R
     fs::write(&path, bytes).map_err(|e| format!("写入失败: {e}"))
 }
 
+/// 读取二进制资产（如图片附件），返回 base64 编码字符串。
+#[tauri::command]
+pub fn project_read_binary(root: String, rel: String) -> Result<Option<String>, String> {
+    use base64::Engine;
+    let path = resolve(&root, &rel)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(|e| format!("读取失败: {e}"))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(Some(b64))
+}
+
 #[tauri::command]
 pub fn project_list_dir(root: String, rel: String) -> Result<Vec<String>, String> {
     let path = resolve(&root, &rel)?;

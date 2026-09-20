@@ -25,6 +25,7 @@ export interface AIProviderConfig {
   isEnabled: boolean;
   defaultModel?: string;
   customModels?: string[];
+  suggestedModels?: string[];
   isCustom?: boolean;
   allowPrivateNetwork?: boolean;
   allowedInternalHosts?: string[];

@@ -183,21 +183,18 @@ No explanations.`;
     }, 400);
   };
 
-  // Save generated image to project assets
-  const handleSaveImageToAssets = () => {
+  // Save generated image to project assets (MD5 命名与去重)
+  const handleSaveImageToAssets = async () => {
     if (!generatedImgUrl) return;
-    const id = `asset-img-${Date.now()}`;
-    const newAsset: Asset = {
-      id,
-      name: imgPrompt.slice(0, 16) || 'AI 生成图片',
-      type: 'image',
-      mimeType: 'image/png',
-      source: 'ai_generated',
-      relPath: `assets/images/${id}.png`,
-      refCount: 0
-    };
-    addAsset(newAsset);
-    showFeedback(`图片素材已保存至工程资产库 (${id})`);
+    const attachmentStore = useProjectStore.getState().getAttachmentStore();
+    const saved = await attachmentStore.save(imgPrompt.slice(0, 16) || 'AI 生成图片', generatedImgUrl);
+    if (saved) {
+      addAsset({
+        ...saved,
+        source: 'ai_generated'
+      });
+      showFeedback(`图片素材已保存至工程资产库 (${saved.id})`);
+    }
   };
 
   // Apply image to currently selected element in canvas
@@ -230,27 +227,23 @@ No explanations.`;
     }
   };
 
-  // Handle local image file upload
+  // Handle local image file upload (MD5 命名与去重)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const attachmentStore = useProjectStore.getState().getAttachmentStore();
+
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
-      reader.onload = (loadEvent) => {
+      reader.onload = async (loadEvent) => {
         const result = loadEvent.target?.result as string;
         if (result) {
-          const id = `asset-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-          addAsset({
-            id,
-            name: file.name,
-            type: 'image',
-            mimeType: file.type || 'image/png',
-            source: 'upload',
-            relPath: result,
-            refCount: 0
-          });
-          showFeedback(`上传成功: ${file.name}`);
+          const saved = await attachmentStore.save(file.name, result);
+          if (saved) {
+            addAsset(saved);
+            showFeedback(`上传成功: ${file.name}`);
+          }
         }
       };
       reader.readAsDataURL(file);

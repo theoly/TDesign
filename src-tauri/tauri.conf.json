@@ -10,8 +10,10 @@
     "beforeBuildCommand": "bun run build"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "AI Designer Studio",
         "width": 1440,
         "height": 900,

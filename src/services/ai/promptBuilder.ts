@@ -47,7 +47,8 @@ You MUST return the complete, standalone HTML design enclosed strictly inside an
 </artifact>
 - The root element inside the artifact must be a container element with utility classes, such as <div class="card p-6 ...">, <main class="p-6 ...">, <section class="p-6 ...">, or <form class="card p-6 ...">.
 - Absolutely DO NOT output conversational chatter, greetings, explanations, or markdown code blocks outside or around the <artifact> block.
-- 必须且仅输出单个被 <artifact identifier="..." type="screen" title="..."> 与 </artifact> 包裹的高保真 HTML，严禁在标签之外输出任何解释、寒暄或 Markdown 文本。顶层容器请使用 <div>, <main>, <section> 或 <form>。`;
+- 必须且仅输出单个被 <artifact identifier="..." type="screen" title="..."> 与 </artifact> 包裹的高保真 HTML，严禁在标签之外输出任何解释、寒暄或 Markdown 文本。顶层容器请使用 <div>, <main>, <section> 或 <form>。
+- title 属性规范：必须为贴切的页面标题，在表达贴切的同时尽量简短，不要超过 20 个汉字（例如：“动态详情”、“会员中心”、“送花表达心意 - 牵手币充值”），严禁长篇大论或冗余说明。`;
 
 /**
  * contextEnricher 末尾追加的单行提醒，必须由 ARTIFACT_OUTPUT_CONTRACT 派生
@@ -93,10 +94,20 @@ export interface PromptBuildOptions {
   frameWidth: number;
   components?: ComponentDefinition[];
   /**
+   * 当前工程生效的明暗模式 (ISSUE-015)。Token 必须按此模式编译，
+   * 否则模型看到的是另一套色值，会照着它写死颜色。
+   */
+  colorMode?: 'light' | 'dark';
+  /**
    * 决定美学段落的注入粒度 (T-AE-10 / REQ-OD-06)。
    * Few-Shot 范例仅在新建画框时注入；change_theme / question 零注入。
    */
   intent?: GenerationIntent;
+  /**
+   * 是否附带参考设计图 (Vision / Attachment)。
+   * 若附带参考图，必须抑制通用的登录 Few-Shot 范例，避免将锁头图标、固定吸底等代码污染进复刻结果。
+   */
+  hasAttachment?: boolean;
 }
 
 export class PromptBuilder {
@@ -115,11 +126,18 @@ Your role is to produce exceptional, high-fidelity, responsive UI designs follow
    - All colors, margins, fonts, radii, and shadows MUST reference CSS variables or white-listed classes.
    - DO NOT include <script> tags.
 2. ICONS & IMAGES:
-   - Use inline SVG icons with stroke="currentColor" and class="icon".
+   - Use inline SVG icons with stroke="currentColor" and class="icon" (default 20x20px).
+   - NEVER output bare, unconstrained SVGs inside input fields or cards without class="icon".
+   - When placing icons inside text inputs, ALWAYS wrap them in <div class="input-group"><svg class="icon" .../><input class="input" .../></div>.
    - For images, you may use placeholder SVG data URLs or valid image URLs.
 3. TARGET DEVICE PROFILE:
    - Width: ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})
-   - Height: Content driven (natural height)`;
+   - Height: Content driven (natural height)
+4. COLOR MODE (CRITICAL):
+   - The project is currently rendering in ${(options.colorMode ?? 'light').toUpperCase()} mode.
+   - The token values below are already resolved for ${(options.colorMode ?? 'light').toUpperCase()} mode. Do NOT infer a different mode from them.
+   - NEVER hardcode a color literal. The user can toggle light/dark at any time, and the page MUST follow that toggle automatically.
+   - This only works if every color comes from var(--color-*) or a white-listed class. A literal such as background:#0b1020 permanently freezes the page in one mode and is a defect.`;
     sections.push({ id: 'role_core', content: roleContent });
 
     // 2. design_spec (BR-03 / REQ-OD-03)
@@ -131,7 +149,7 @@ Your role is to produce exceptional, high-fidelity, responsive UI designs follow
     sections.push({ id: 'design_spec', content: specContent });
 
     // 3. design_tokens
-    const tokensCss = compileTokensToCss(options.designSystem.tokens, 'light');
+    const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light');
     const tokensContent = `### DESIGN TOKENS:\n\`\`\`css\n${tokensCss}\n\`\`\``;
     sections.push({ id: 'design_tokens', content: tokensContent });
 
@@ -167,8 +185,8 @@ Your role is to produce exceptional, high-fidelity, responsive UI designs follow
       sections.push({ id: 'craft_references', content: craftContent });
     }
 
-    // 7. reference_example (T-AE-10 / 仅 create_screen)
-    if (intent === 'create_screen') {
+    // 7. reference_example (T-AE-10 / 仅无参考图的纯文本 create_screen 时注入)
+    if (intent === 'create_screen' && !options.hasAttachment) {
       const exampleContent = `### REFERENCE EXAMPLE (match this level of polish, not its content):\n\`\`\`html\n${getFewShotExample(
         options.deviceProfile
       )}\n\`\`\``;
@@ -223,7 +241,7 @@ Possible Intents:
 Reply in strictly valid JSON:
 {
   "intent": "create_screen" | "modify_screen" | "change_theme" | "question",
-  "screenName": "Proposed name for the screen",
+  "screenName": "Proposed accurate and concise screen name (<= 20 chars, e.g. 动态详情)",
   "summary": "One sentence summary echo to show the user before execution"
 }`;
   }

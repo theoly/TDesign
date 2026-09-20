@@ -90,6 +90,8 @@ export interface ProjectDocument {
   decisions?: unknown;
   overrides?: unknown;
   panelStates?: unknown;
+  coverImage?: string;
+  quickPrompts?: unknown;
 }
 
 export class ProjectRepository {

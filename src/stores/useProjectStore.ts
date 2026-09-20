@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { DesignSystem } from '../types/designSystem';
+import { QuickPromptItem } from '../types/quickPrompt';
+import { ScreenAuditReport } from '../utils/tokenLint';
 import {
   Asset,
   AssetId,
@@ -12,7 +14,7 @@ import {
   ScreenId,
   StyleOverride
 } from '../types/project';
-import { techBlueTheme } from '../utils/themePresets';
+import { defaultTheme, neutralModernTheme, techBlueTheme } from '../utils/themePresets';
 import { NidEngine } from '../utils/nidEngine';
 import { buildStyleSpecimenHtml } from '../utils/styleSpecimen';
 import { createProjectStorage } from '../services/storage/projectStorage';
@@ -37,6 +39,15 @@ import {
 } from '../utils/projectRegistry';
 import { useHistoryStore, setApplyPatchesHandler } from './useHistoryStore';
 import { Patch } from '../types/history';
+import {
+  calculateNewScreenPosition,
+  arrangeScreensGrid,
+  ScreenShiftInstruction,
+  SnapGuides,
+  resolveVerticalGrowthPushRight,
+  CANVAS_LAYOUT_CONSTANTS
+} from '../utils/canvasLayout';
+import { deleteElementByNid } from '../utils/domPatcher';
 
 /** 新建工程时的空白起始画框 (PRD §3.0.1) */
 const blankScreenHtml = (name: string) => `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
@@ -60,6 +71,60 @@ export interface ThemeConflict {
   escaped: boolean;
 }
 
+/**
+ * 新画框的落位：排在现有画框最右侧之外一个画框宽度 + 间距 (ISSUE-017)。
+ *
+ * 此前 `addBlankScreen` 按 `screenOrder.length * 40` 递增、`duplicateScreen`
+ * 固定偏移 80px，而画框宽 390 (mobile) ~ 1440 (pc) px——新画框几乎完整压在
+ * 旧画框之上，被压住的画框既看不见也点不到。AI 生成画框走的正是这套右侧
+ * 平铺规则 (ISSUE-013)，此处与之对齐。
+ */
+const nextFramePosition = (
+  state: {
+    screenOrder: ScreenId[];
+    screens: Record<ScreenId, Screen>;
+    settings: ProjectSettings;
+    activeScreenId?: ScreenId | null;
+  },
+  options?: { referencedScreenId?: string; anchorScreenId?: string }
+): { x: number; y: number } => {
+  const result = calculateNewScreenPosition(state.screens, state.screenOrder, {
+    frameWidth: state.settings.frameWidth,
+    viewportGuideHeight: state.settings.viewportGuideHeight,
+    referencedScreenId: options?.referencedScreenId,
+    anchorScreenId: options?.anchorScreenId ?? state.activeScreenId
+  });
+  return result.position;
+};
+
+export interface PanToScreenOptions {
+  scale?: number;
+  offsetY?: number;
+  offsetX?: number;
+  center?: boolean;
+  viewportWidth?: number;
+}
+
+export interface ComputedBoxModel {
+  width: number;
+  height: number;
+  top: number;
+  left: number;
+  padding: { top: number; right: number; bottom: number; left: number };
+  margin: { top: number; right: number; bottom: number; left: number };
+}
+
+export interface ComputedLayoutInfo {
+  display: string;
+  flexDirection?: string;
+  alignItems?: string;
+  justifyContent?: string;
+  flexWrap?: string;
+  gap?: string;
+  rowGap?: string;
+  columnGap?: string;
+}
+
 export interface SelectedNodeInfo {
   screenId: string;
   nid: string;
@@ -73,14 +138,18 @@ export interface SelectedNodeInfo {
   parentChain?: { nid: string; tagName: string; className?: string }[];
   componentId?: string;
   componentInstanceId?: string;
-  computedBox: {
-    width: number;
-    height: number;
-    top: number;
-    left: number;
-    padding: { top: number; right: number; bottom: number; left: number };
-    margin: { top: number; right: number; bottom: number; left: number };
-  };
+  computedBox: ComputedBoxModel;
+  computedLayout?: ComputedLayoutInfo;
+}
+
+/** Add to Chat 功能：被引用进对话框的节点引用 (spec: doc/feature/element-add-to-chat/spec.md) */
+export interface NodeReference {
+  screenId: string;
+  screenName: string;
+  nid: string;
+  tagName: string;
+  /** 被引用元素的 outerHTML 截断至 300 字符，供 AI 理解上下文 */
+  htmlSnippet: string;
 }
 
 interface ProjectState {
@@ -114,12 +183,35 @@ interface ProjectState {
   selectedNode: SelectedNodeInfo | null;
   viewportTransform: { x: number; y: number; scale: number };
 
+  /** 拖拽对齐网格参考线与吸附状态 (BR-ALIGN-03) */
+  activeSnapGuides: SnapGuides | null;
+  setSnapGuides: (guides: SnapGuides | null) => void;
+  clearSnapGuides: () => void;
+
   // Temporary Artboard for Side-by-Side adoption (D17 / §3.2.9)
   stagedScreen: {
     targetScreenId: ScreenId;
     newHtml: string;
     screenName: string;
   } | null;
+
+  /** Add to Chat 功能：待注入对话框的节点引用（单次，发送后清除）*/
+  pendingNodeRef: NodeReference | null;
+
+  /** 一键评测报告推送（供属性面板推入对话，消费后清除） */
+  pendingAuditReport: ScreenAuditReport | null;
+  postAuditReport: (report: ScreenAuditReport) => void;
+  clearPendingAuditReport: () => void;
+
+  /** 自定义工程封面图片 DataURL */
+  coverImage: string | null;
+  setCoverImage: (cover: string | null) => void;
+
+  /** 当前工程专属快捷输入短语列表 (scope: project) */
+  quickPrompts: QuickPromptItem[];
+  addProjectQuickPrompt: (prompt: { title: string; content: string }) => QuickPromptItem;
+  updateProjectQuickPrompt: (id: string, updates: { title?: string; content?: string }) => void;
+  deleteProjectQuickPrompt: (id: string) => void;
 
   // Actions
   setName: (name: string) => void;
@@ -135,7 +227,11 @@ interface ProjectState {
   clearOverridesForTheme: (keys: string[], includeEscaped?: boolean) => number;
 
   // Screen CRUD
-  addScreen: (screen: Omit<Screen, 'id'>, customId?: string) => ScreenId;
+  addScreen: (
+    screen: (Omit<Screen, 'id' | 'position'> & { position?: { x: number; y: number } }) | Screen,
+    customId?: string,
+    options?: { referencedScreenId?: string; anchorScreenId?: string; autoPan?: boolean }
+  ) => ScreenId;
   /** 画框是否为风格样张页（doc/aesthetic/spec.md §6.6.7） */
   isSpecimen: (id: ScreenId) => boolean;
   /** 某画框中被 L4 手动覆盖的 nid —— Polish/Restyle 不应改动它们 (T-AE-26) */
@@ -150,18 +246,30 @@ interface ProjectState {
   getAttachmentStore: () => AttachmentStore;
   /** 删除样张后重新生成一份（§6.6.7 生命周期） */
   regenerateSpecimen: () => ScreenId;
+  /** 一键创建空白业务画框 (纯净画布引导 / 用户主动添加) */
+  addBlankScreen: (name?: string) => ScreenId;
   updateScreen: (id: ScreenId, updates: Partial<Screen>, historyLabel?: string) => void;
+  updateScreenPositions: (
+    positions: Record<ScreenId, { x: number; y: number }>,
+    historyLabel?: string,
+    originalPositions?: Record<ScreenId, { x: number; y: number }>
+  ) => void;
   updateScreenHtml: (id: ScreenId, htmlContent: string, historyLabel?: string) => void;
+  /** 级联删除指定节点及其全部子孙节点，同步清除对应样式覆盖 (ISSUE-021) */
+  deleteNode: (screenId: ScreenId, nid: string) => boolean;
   removeScreen: (id: ScreenId) => void;
   renameScreen: (id: ScreenId, name: string) => void;
   duplicateScreen: (id: ScreenId) => ScreenId | null;
   arrangeScreens: () => void;
   reorderScreens: (newOrder: ScreenId[]) => void;
   setActiveScreen: (id: ScreenId | null) => void;
+  /** 平移画布视口以聚焦目标画框 (BR-NAV-01 / spec: doc/feature/new-screen-auto-focus/spec.md) */
+  panToScreen: (screenId: ScreenId, options?: PanToScreenOptions) => void;
   selectNodeByNid: (screenId: ScreenId, nid: string) => void;
 
   // Overrides (L4)
   setOverride: (screenId: ScreenId, nid: string, declarations: Record<string, string>, escaped?: boolean, historyLabel?: string) => void;
+  clearNodeOverrides: (screenId: ScreenId, nid: string) => void;
   clearScreenOverrides: (screenId: ScreenId) => void;
 
   // Decisions (D20)
@@ -199,6 +307,10 @@ interface ProjectState {
   setHoveredNid: (nid: string | null) => void;
   setViewportTransform: (transform: { x: number; y: number; scale: number }) => void;
 
+  /** Add to Chat 功能：设置/清除待引用节点 */
+  setPendingNodeRef: (ref: NodeReference) => void;
+  clearPendingNodeRef: () => void;
+
   // Side-by-Side Staging (D17)
   stageScreenChange: (targetScreenId: ScreenId, newHtml: string, screenName: string) => void;
   adoptStagedChange: () => void;
@@ -208,7 +320,7 @@ interface ProjectState {
   // Persistence & Recovery (T-02, T-03, T-04)
   saveProject: () => void;
   loadProject: (jsonString: string) => void;
-  initNewProject: (opts: { name: string; deviceProfile: 'pc' | 'mobile'; designSystem: DesignSystem; initialDecisions?: string[] }) => string;
+  initNewProject: (opts: { name: string; deviceProfile: 'pc' | 'mobile'; designSystem: DesignSystem; initialDecisions?: string[]; folderPath?: string; createSpecimen?: boolean }) => string;
   loadProjectById: (id: string) => boolean;
   /** 从文件夹读回的工程文档载入 (T-AE-43) */
   loadProjectDocument: (doc: unknown, folderPath: string) => boolean;
@@ -300,7 +412,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     colorMode: 'light',
     lodBudget: 12
   },
-  designSystem: techBlueTheme,
+  designSystem: neutralModernTheme,
 
   screens: {
     'screen-1': initialScreen1,
@@ -326,7 +438,59 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   hoveredNid: null,
   selectedNode: null,
   viewportTransform: { x: 80, y: 80, scale: 0.7 },
+  activeSnapGuides: null,
   stagedScreen: null,
+  pendingNodeRef: null,
+  pendingAuditReport: null,
+  coverImage: null,
+  quickPrompts: [],
+
+  setSnapGuides: (guides) => set({ activeSnapGuides: guides }),
+  clearSnapGuides: () => set({ activeSnapGuides: null }),
+
+  postAuditReport: (report) => set({ pendingAuditReport: report }),
+  clearPendingAuditReport: () => set({ pendingAuditReport: null }),
+
+  setCoverImage: (cover) => {
+    set({ coverImage: cover });
+    get().saveProject();
+  },
+
+  addProjectQuickPrompt: ({ title, content }) => {
+    const newPrompt: QuickPromptItem = {
+      id: `proj-qp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: title.trim(),
+      content: content.trim(),
+      scope: 'project',
+      createdAt: Date.now()
+    };
+    set((state) => ({
+      quickPrompts: [...state.quickPrompts, newPrompt]
+    }));
+    get().saveProject();
+    return newPrompt;
+  },
+
+  updateProjectQuickPrompt: (id, updates) => {
+    set((state) => ({
+      quickPrompts: state.quickPrompts.map((p) => {
+        if (p.id !== id) return p;
+        return {
+          ...p,
+          ...(updates.title !== undefined ? { title: updates.title.trim() } : {}),
+          ...(updates.content !== undefined ? { content: updates.content.trim() } : {})
+        };
+      })
+    }));
+    get().saveProject();
+  },
+
+  deleteProjectQuickPrompt: (id) => {
+    set((state) => ({
+      quickPrompts: state.quickPrompts.filter((p) => p.id !== id)
+    }));
+    get().saveProject();
+  },
 
   setName: (name) => {
     set({ name });
@@ -515,26 +679,91 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 
-  addScreen: (screenData, customId) => {
+  addBlankScreen: (name?: string) => {
+    const defaultName = name || `页面 ${get().screenOrder.length + 1}`;
+    const html = NidEngine.injectNids(blankScreenHtml(defaultName));
+    const id = get().addScreen({
+      name: defaultName,
+      htmlContent: html
+    });
+    get().panToScreen(id);
+    return id;
+  },
+
+  addScreen: (screenData, customId, options) => {
     const id = customId || `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const rawHtml = screenData.htmlContent || '<div class="p-8"><h1>新画板</h1></div>';
     const htmlContent = rawHtml.includes('data-nid=') ? rawHtml : NidEngine.injectNids(rawHtml);
-    const screen: Screen = { ...screenData, id, htmlContent };
+
+    let position = screenData.position;
+    let shiftedScreens: ScreenShiftInstruction[] = [];
+
+    // 若未显式传入坐标，或指定了引用画框，由智能布局引擎计算
+    if (!position || options?.referencedScreenId) {
+      const layout = calculateNewScreenPosition(get().screens, get().screenOrder, {
+        frameWidth: get().settings.frameWidth,
+        viewportGuideHeight: get().settings.viewportGuideHeight,
+        referencedScreenId: options?.referencedScreenId,
+        anchorScreenId: options?.anchorScreenId ?? get().activeScreenId
+      });
+      position = layout.position;
+      shiftedScreens = layout.shiftedScreens;
+    }
+
+    const screen: Screen = { ...screenData, id, position, htmlContent };
     const prevScreens = get().screens;
-    const prevOrder = get().screenOrder;
+
+    // 历史变更记录：包含新画框添加，以及避让画框的位移
+    const forwardOps: Array<{ op: 'add' | 'replace'; path: string[]; value: any }> = [
+      { op: 'add', path: ['screens', id], value: screen }
+    ];
+    const backwardOps: Array<{ op: 'remove' | 'replace'; path: string[]; value?: any }> = [
+      { op: 'remove', path: ['screens', id] }
+    ];
+
+    for (const shift of shiftedScreens) {
+      if (prevScreens[shift.id]) {
+        forwardOps.push({
+          op: 'replace',
+          path: ['screens', shift.id, 'position'],
+          value: { ...prevScreens[shift.id].position, x: shift.newX }
+        });
+        backwardOps.push({
+          op: 'replace',
+          path: ['screens', shift.id, 'position'],
+          value: prevScreens[shift.id].position
+        });
+      }
+    }
 
     useHistoryStore.getState().commit(
       `新建画框: ${screen.name}`,
-      [{ op: 'add', path: ['screens', id], value: screen }],
-      [{ op: 'remove', path: ['screens', id] }]
+      forwardOps as any,
+      backwardOps as any
     );
 
-    set((state) => ({
-      screens: { ...state.screens, [id]: screen },
-      screenOrder: [...state.screenOrder, id],
-      activeScreenId: id
-    }));
+    set((state) => {
+      const nextScreens = { ...state.screens, [id]: screen };
+      for (const shift of shiftedScreens) {
+        if (nextScreens[shift.id]) {
+          nextScreens[shift.id] = {
+            ...nextScreens[shift.id],
+            position: { ...nextScreens[shift.id].position, x: shift.newX }
+          };
+        }
+      }
+      return {
+        screens: nextScreens,
+        screenOrder: [...state.screenOrder, id],
+        activeScreenId: id
+      };
+    });
     get().saveProject();
+
+    if (options?.autoPan) {
+      get().panToScreen(id);
+    }
+
     return id;
   },
 
@@ -555,11 +784,125 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       screens: { ...state.screens, [id]: updated }
     }));
     get().saveProject();
+
+    // 如果画框高度发生增长，且具有有效坐标，检测是否侵入下方排画框并自动执行右移一列避让 (BR-ALIGN-06)
+    if (
+      updates.measuredHeight &&
+      updates.measuredHeight > (prevScreen.measuredHeight || 0) &&
+      updated.position
+    ) {
+      const growthResult = resolveVerticalGrowthPushRight({
+        changedScreenId: id,
+        newHeight: updates.measuredHeight,
+        screens: get().screens,
+        frameWidth: get().settings.frameWidth,
+        gapX: CANVAS_LAYOUT_CONSTANTS.DEFAULT_GAP_X,
+        gapY: CANVAS_LAYOUT_CONSTANTS.DEFAULT_GAP_Y
+      });
+
+      if (growthResult.shiftedScreens.length > 0) {
+        const positions: Record<string, { x: number; y: number }> = {};
+        for (const shift of growthResult.shiftedScreens) {
+          const s = get().screens[shift.id];
+          if (s && s.position) {
+            positions[shift.id] = { x: shift.newX, y: s.position.y };
+          }
+        }
+        get().updateScreenPositions(positions, '页面加长避让下排');
+      }
+    }
+  },
+
+  updateScreenPositions: (positions, historyLabel, originalPositions) => {
+    const prevScreens = get().screens;
+    const forwardOps: Array<{ op: 'replace'; path: string[]; value: any }> = [];
+    const backwardOps: Array<{ op: 'replace'; path: string[]; value: any }> = [];
+    const nextScreens = { ...prevScreens };
+
+    for (const [id, pos] of Object.entries(positions)) {
+      const prev = prevScreens[id];
+      if (!prev || !prev.position) continue;
+
+      const origPos = originalPositions?.[id] || prev.position;
+
+      forwardOps.push({
+        op: 'replace',
+        path: ['screens', id, 'position'],
+        value: pos
+      });
+      backwardOps.push({
+        op: 'replace',
+        path: ['screens', id, 'position'],
+        value: origPos
+      });
+
+      nextScreens[id] = {
+        ...prev,
+        position: pos
+      };
+    }
+
+    if (historyLabel && forwardOps.length > 0) {
+      useHistoryStore.getState().commit(
+        historyLabel,
+        forwardOps as any,
+        backwardOps as any
+      );
+    }
+
+    set({ screens: nextScreens });
+    get().saveProject();
   },
 
   updateScreenHtml: (id, htmlContent, historyLabel) => {
     const injected = htmlContent.includes('data-nid=') ? htmlContent : NidEngine.injectNids(htmlContent);
     get().updateScreen(id, { htmlContent: injected }, historyLabel || '修改页面内容');
+  },
+
+  deleteNode: (screenId, nid) => {
+    const screen = get().screens[screenId];
+    if (!screen || !nid) return false;
+
+    const res = deleteElementByNid(screen.htmlContent, nid);
+    if (!res.success) {
+      console.warn(`[deleteNode] 失败: ${res.error}`);
+      return false;
+    }
+
+    // 1. 清理被删除节点及其全部子孙节点的样式覆盖 (overrides)
+    const prevOverrides = get().overrides;
+    const nextOverrides = { ...prevOverrides };
+    let hasOverrideChanged = false;
+    for (const delNid of res.deletedNids) {
+      const key = `${screenId}:${delNid}`;
+      if (nextOverrides[key]) {
+        delete nextOverrides[key];
+        hasOverrideChanged = true;
+      }
+    }
+
+    if (hasOverrideChanged) {
+      set({ overrides: nextOverrides });
+    }
+
+    // 2. 若当前选中或悬停的节点在被删除的子树中，自动重置选区
+    const curSelectedNid = get().selectedNid;
+    const curHoveredNid = get().hoveredNid;
+    const resetSelection: Partial<ProjectState> = {};
+    if (curSelectedNid && res.deletedNids.includes(curSelectedNid)) {
+      resetSelection.selectedNid = null;
+      resetSelection.selectedNode = null;
+    }
+    if (curHoveredNid && res.deletedNids.includes(curHoveredNid)) {
+      resetSelection.hoveredNid = null;
+    }
+    if (Object.keys(resetSelection).length > 0) {
+      set(resetSelection as any);
+    }
+
+    // 3. 更新 HTML 并提交历史事务 (内部由 updateScreen 提交 Commit)
+    get().updateScreenHtml(screenId, res.html, `删除元素及子树: #${nid}`);
+    return true;
   },
 
   removeScreen: (id) => {
@@ -597,31 +940,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ...s,
       id: newId,
       name: `${s.name} (副本)`,
-      position: { x: s.position.x + 80, y: s.position.y + 80 },
       htmlContent: NidEngine.injectNids(NidEngine.stripInternalAttributes(s.htmlContent))
     };
-    get().addScreen(newScreen, newId);
+    get().addScreen(newScreen, newId, { referencedScreenId: id });
+    get().panToScreen(newId);
     return newId;
   },
 
   arrangeScreens: () => {
-    set((state) => {
-      const nextScreens = { ...state.screens };
-      let curX = 100;
-      const curY = 120;
-      const spacingX = 120;
-      const frameWidth = state.settings.frameWidth;
-
-      state.screenOrder.forEach((id) => {
-        const s = nextScreens[id];
-        if (!s) return;
-        nextScreens[id] = {
-          ...s,
-          position: { x: curX, y: curY }
-        };
-        curX += frameWidth + spacingX;
-      });
-
+    const state = get();
+    const newPositions = arrangeScreensGrid(
+      state.screens,
+      state.screenOrder,
+      state.settings.frameWidth,
+      state.settings.viewportGuideHeight
+    );
+    set((s) => {
+      const nextScreens = { ...s.screens };
+      for (const [id, pos] of Object.entries(newPositions)) {
+        if (nextScreens[id]) {
+          nextScreens[id] = { ...nextScreens[id], position: pos };
+        }
+      }
       return { screens: nextScreens };
     });
     get().saveProject();
@@ -633,6 +973,47 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setActiveScreen: (id) => {
     set({ activeScreenId: id, selectedNid: null, selectedNode: null });
+  },
+
+  panToScreen: (screenId, options) => {
+    const screen = get().screens[screenId];
+    if (!screen || !screen.position) return;
+
+    set({ activeScreenId: screenId, selectedNid: null, selectedNode: null });
+
+    const currentScale = get().viewportTransform.scale;
+    const deviceProfile = get().settings.deviceProfile;
+    const frameWidth = get().settings.frameWidth;
+
+    let targetScale = options?.scale;
+    if (targetScale === undefined) {
+      if (deviceProfile === 'mobile') {
+        targetScale = Math.min(Math.max(currentScale, 0.75), 1.0);
+      } else {
+        targetScale = Math.min(Math.max(currentScale, 0.5), 0.75);
+      }
+    }
+
+    const containerW =
+      options?.viewportWidth ??
+      (typeof window !== 'undefined' ? Math.max(window.innerWidth - 320, 800) : 1000);
+
+    let targetX: number;
+    if (options?.center !== false) {
+      targetX = Math.round(containerW / 2 - (screen.position.x + frameWidth / 2) * targetScale);
+    } else {
+      targetX = Math.round(-screen.position.x * targetScale + (options?.offsetX ?? 120));
+    }
+
+    const targetY = Math.round(-screen.position.y * targetScale + (options?.offsetY ?? 100));
+
+    set({
+      viewportTransform: {
+        x: targetX,
+        y: targetY,
+        scale: targetScale
+      }
+    });
   },
 
   selectNodeByNid: (screenId, nid) => {
@@ -654,14 +1035,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     while (cur && cur !== doc.body) {
       const pNid = cur.getAttribute('data-nid');
       if (pNid) {
+        const clsAttr = cur.getAttribute('class');
+        const cls = clsAttr || (typeof cur.className === 'string' ? cur.className : (cur.className && typeof cur.className === 'object' && 'baseVal' in cur.className ? String((cur.className as any).baseVal) : ''));
         parentChain.unshift({
           nid: pNid,
           tagName: cur.tagName.toLowerCase(),
-          className: cur.className
+          className: cls
         });
       }
       cur = cur.parentElement;
     }
+
+    // Inferred layout from class names
+    const isFlex = el.classList.contains('row') || el.classList.contains('col');
+    const isGrid = Array.from(el.classList).some((c) => c.startsWith('grid-'));
+    const isCol = el.classList.contains('col');
+    const isWrap = el.classList.contains('wrap');
+    const gapClass = Array.from(el.classList).find((c) => c.startsWith('gap-'));
+    const gapVal = gapClass ? `var(--space-${gapClass.replace('gap-', '')})` : '0px';
 
     get().selectNode({
       screenId,
@@ -682,6 +1073,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         left: 0,
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
         margin: { top: 0, right: 0, bottom: 0, left: 0 }
+      },
+      computedLayout: {
+        display: isFlex ? 'flex' : isGrid ? 'grid' : (['div', 'section', 'header', 'footer', 'nav', 'main', 'aside', 'article'].includes(el.tagName.toLowerCase()) ? 'block' : 'inline-block'),
+        flexDirection: isCol ? 'column' : 'row',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+        flexWrap: isWrap ? 'wrap' : 'nowrap',
+        gap: gapVal
       }
     });
   },
@@ -689,23 +1088,66 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setOverride: (screenId, nid, declarations, escaped = false, historyLabel) => {
     const key = `${screenId}:${nid}`;
     const prevOverride = get().overrides[key];
+
+    let mergedDeclarations: Record<string, string>;
+    if (Object.keys(declarations).length === 0) {
+      mergedDeclarations = {};
+    } else {
+      mergedDeclarations = { ...(prevOverride?.declarations || {}) };
+      for (const [prop, val] of Object.entries(declarations)) {
+        if (val === '' || val === undefined || val === null) {
+          delete mergedDeclarations[prop];
+        } else {
+          mergedDeclarations[prop] = val;
+        }
+      }
+    }
+
+    const hasDeclarations = Object.keys(mergedDeclarations).length > 0;
     const newOverride: StyleOverride = {
       nid,
-      declarations: { ...(prevOverride?.declarations || {}), ...declarations },
+      declarations: mergedDeclarations,
       escaped
     };
 
     useHistoryStore.getState().commit(
       historyLabel || `修改样式属性: ${nid}`,
-      [{ op: 'replace', path: ['overrides', key], value: newOverride }],
+      hasDeclarations
+        ? [{ op: 'replace', path: ['overrides', key], value: newOverride }]
+        : [{ op: 'remove', path: ['overrides', key] }],
       prevOverride
         ? [{ op: 'replace', path: ['overrides', key], value: prevOverride }]
         : [{ op: 'remove', path: ['overrides', key] }]
     );
 
-    set((state) => ({
-      overrides: { ...state.overrides, [key]: newOverride }
-    }));
+    set((state) => {
+      const next = { ...state.overrides };
+      if (hasDeclarations) {
+        next[key] = newOverride;
+      } else {
+        delete next[key];
+      }
+      return { overrides: next };
+    });
+    get().saveProject();
+  },
+
+  clearNodeOverrides: (screenId, nid) => {
+    const key = `${screenId}:${nid}`;
+    const prevOverride = get().overrides[key];
+    if (!prevOverride) return;
+
+    useHistoryStore.getState().commit(
+      `清除节点 #${nid} 手动样式覆盖`,
+      [{ op: 'remove', path: ['overrides', key] }],
+      [{ op: 'add', path: ['overrides', key], value: prevOverride }]
+    );
+
+    set((state) => {
+      const next = { ...state.overrides };
+      delete next[key];
+      return { overrides: next };
+    });
     get().saveProject();
   },
 
@@ -1019,11 +1461,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return { syncedCount, skippedConflictCount, details };
   },
 
-  // Assets (PRD §3.4.1)
+  // Assets (PRD §3.4.1 / BR-IMG-03 去重复用)
   addAsset: (asset) => {
-    set((state) => ({
-      assets: { ...state.assets, [asset.id]: asset }
-    }));
+    set((state) => {
+      const existingKey = Object.keys(state.assets).find(
+        (id) => state.assets[id].relPath === asset.relPath || id === asset.id
+      );
+      if (existingKey) {
+        const existing = state.assets[existingKey];
+        return {
+          assets: {
+            ...state.assets,
+            [existingKey]: {
+              ...existing,
+              refCount: (existing.refCount || 0) + 1
+            }
+          }
+        };
+      }
+      return {
+        assets: { ...state.assets, [asset.id]: asset }
+      };
+    });
     get().saveProject();
   },
 
@@ -1100,13 +1559,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({
       selectedNode: info,
       selectedNid: info ? info.nid : null,
-      activeScreenId: info ? info.screenId : get().activeScreenId
+      activeScreenId: (info && info.screenId) ? info.screenId : get().activeScreenId
     });
   },
 
   setHoveredNid: (nid) => set({ hoveredNid: nid }),
 
   setViewportTransform: (transform) => set({ viewportTransform: transform }),
+
+  setPendingNodeRef: (ref) => set({ pendingNodeRef: ref }),
+
+  clearPendingNodeRef: () => set({ pendingNodeRef: null }),
 
   // Side-by-side adoption (D17)
   stageScreenChange: (targetScreenId, newHtml, screenName) => {
@@ -1137,18 +1600,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   keepBothScreens: () => {
     const staged = get().stagedScreen;
     if (!staged) return;
-    const count = Object.keys(get().screens).length;
     const newId = `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     get().addScreen({
       name: `${staged.screenName} (AI 方案)`,
-      position: { x: 100 + count * 1560, y: 120 },
       htmlContent: staged.newHtml
-    }, newId);
+    }, newId, { referencedScreenId: staged.targetScreenId });
     set({ stagedScreen: null });
   },
 
   saveProject: () => {
-    const { id, name, settings, designSystem, screens, overrides, decisions, components, assets, panelStates } =
+    const { id, name, settings, designSystem, screens, overrides, decisions, components, assets, panelStates, coverImage, quickPrompts } =
       get();
     const data = {
       id,
@@ -1162,7 +1623,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       decisions,
       components,
       assets,
-      panelStates
+      panelStates,
+      coverImage: coverImage || undefined,
+      quickPrompts: quickPrompts && quickPrompts.length > 0 ? quickPrompts : undefined
     };
     const { folderPath } = get();
     if (folderPath) {
@@ -1187,20 +1650,41 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       updatedAt: data.savedAt,
       screenCount: Object.keys(screens).length,
       previewHtml: firstScreen?.htmlContent,
-      previewCss: compileTokensToCss(designSystem.tokens, settings.colorMode),
-      folderPath: get().folderPath
+      previewCss: designSystem?.tokens ? compileTokensToCss(designSystem.tokens, settings.colorMode) : '',
+      folderPath: get().folderPath,
+      coverImage: coverImage || undefined
     };
     upsertMeta(meta);
   },
 
-  /** 新建空白工程并切换为当前工程 (PRD §3.0.1)。设备档位在此确定，之后不可更改 (D8) */
-  initNewProject: ({ name, deviceProfile, designSystem: ds, initialDecisions }) => {
+  /** 新建空白工程并切换为当前工程 (PRD §3.0.1)。默认纯净画布 (0 画框，保证工作区只有有效产物) */
+  initNewProject: ({ name, deviceProfile, designSystem: ds, initialDecisions, folderPath, createSpecimen }) => {
     const id = `proj_${Date.now().toString(36)}`;
-    const screenId = `screen-${Date.now().toString(36)}`;
     const now = Date.now();
+    const effectiveDs = ds || defaultTheme;
+    let screens: Record<ScreenId, Screen> = {};
+    let screenOrder: ScreenId[] = [];
+    let activeScreenId: ScreenId | null = null;
+
+    if (createSpecimen) {
+      const screenId = `screen-${Date.now().toString(36)}`;
+      screens = {
+        [screenId]: {
+          id: screenId,
+          name: '🎨 风格样张',
+          position: { x: 100, y: 120 },
+          htmlContent: NidEngine.injectNids(buildStyleSpecimenHtml(deviceProfile)),
+          metadata: { kind: 'specimen' }
+        }
+      };
+      screenOrder = [screenId];
+      activeScreenId = screenId;
+    }
+
     set({
       id,
       name,
+      folderPath,
       createdAt: now,
       settings: {
         deviceProfile,
@@ -1210,17 +1694,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         colorMode: 'light',
         lodBudget: 12
       },
-      designSystem: ds,
-      screens: {
-        [screenId]: {
-          id: screenId,
-          name: '🎨 风格样张',
-          position: { x: 100, y: 120 },
-          htmlContent: NidEngine.injectNids(buildStyleSpecimenHtml(deviceProfile)),
-          metadata: { kind: 'specimen' }
-        }
-      },
-      screenOrder: [screenId],
+      designSystem: effectiveDs,
+      screens,
+      screenOrder,
       overrides: {},
       // T-AE-20: 三问中「行业语境」等不可量化的偏好落为工程约定，
       // 复用既有 Decision 结构与 Prompt 注入链路，不新增持久化结构
@@ -1233,14 +1709,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       components: {},
       assets: {},
       panelStates: {},
-      activeScreenId: screenId,
+      activeScreenId,
       selectedNid: null,
       hoveredNid: null,
       selectedNode: null,
       stagedScreen: null,
+      pendingNodeRef: null,
+      pendingAuditReport: null,
+      coverImage: null,
+      quickPrompts: [],
       viewportTransform: { x: 80, y: 80, scale: 0.7 }
     });
     get().saveProject();
+    if (folderPath) {
+      void new ProjectRepository(createProjectStorage(id, folderPath))
+        .acquireLock()
+        .catch(() => {});
+    }
     return id;
   },
 
@@ -1291,7 +1776,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         decisions: data.decisions || {},
         components: data.components || {},
         assets: data.assets || {},
-        panelStates: data.panelStates || {}
+        panelStates: data.panelStates || {},
+        coverImage: data.coverImage || null,
+        quickPrompts: Array.isArray(data.quickPrompts) ? data.quickPrompts : []
       });
     } catch (e) {
       console.error('Invalid project JSON', e);
@@ -1322,6 +1809,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           if (patch.op === 'remove') {
             delete nextScreens[key];
             nextScreenOrder = nextScreenOrder.filter((id) => id !== key);
+          } else if (patch.path.length === 3 && patch.path[2] === 'position' && nextScreens[key]) {
+            nextScreens[key] = {
+              ...nextScreens[key],
+              position: patch.value as { x: number; y: number }
+            };
           } else if (patch.value) {
             nextScreens[key] = patch.value as Screen;
             if (!nextScreenOrder.includes(key)) {

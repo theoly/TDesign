@@ -279,6 +279,21 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
         <div class="glass p-4 r-lg text-sm text-secondary">glass · 毛玻璃表面</div>
         <div class="surface-subtle p-4 r-lg text-sm text-secondary">surface-subtle · 微质感表面</div>
         <div class="border-subtle p-4 r-lg text-sm text-secondary">border-subtle · 半透明微边框（随 borderAlpha 变化）</div>
+        <div class="grid-3 gap-3">
+          <div class="bg-gradient-soft p-3 r-md text-xs text-muted text-center">bg-gradient-soft</div>
+          <div class="bg-ambient-warm p-3 r-md text-xs text-muted text-center">bg-ambient-warm</div>
+          <div class="bg-ambient-cool p-3 r-md text-xs text-muted text-center">bg-ambient-cool</div>
+        </div>
+        <div class="sheet-card p-4 col gap-2">
+          <div class="row items-center justify-between text-xs">
+            <span>sheet-card 底部面板</span>
+            <div class="row items-center">
+              <span>前缀</span>
+              <span class="divider-v"></span>
+              <span>后缀</span>
+            </div>
+          </div>
+        </div>
       </div>`;
 
   const deviceBlock =

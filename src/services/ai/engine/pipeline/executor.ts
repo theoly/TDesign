@@ -6,6 +6,9 @@ import { checkStructureIntegrity } from './interceptors/guardInterceptor';
 import { applyGeneratedHtml } from './interceptors/applier';
 import { PipelineInput, PipelineOutput, PipelineContext } from './types';
 import { AIProviderConfig } from '../../../../types/provider';
+import { PromptBuilder } from '../../promptBuilder';
+import { DesignSystem } from '../../../../types/designSystem';
+import { ComponentDefinition } from '../../../../types/project';
 
 export interface ExecutePipelineOptions {
   input: PipelineInput;
@@ -17,6 +20,13 @@ export interface ExecutePipelineOptions {
   frameWidth: number;
   baseSystemPrompt: string;
   designTokens?: any;
+  /**
+   * 完整设计系统 (ISSUE-015)。传入后由 PromptBuilder 组装带 Token / 类名白名单 /
+   * DESIGN.md / Craft 的完整 System Prompt；缺省时退回 baseSystemPrompt 字面量。
+   */
+  designSystem?: DesignSystem;
+  colorMode?: 'light' | 'dark';
+  components?: ComponentDefinition[];
   designRules?: string[];
   decisions?: Array<{ id: string; rule: string; rationale: string }>;
   onStreamDelta?: (text: string) => void;
@@ -36,6 +46,9 @@ export class PipelineExecutor {
       frameWidth,
       baseSystemPrompt,
       designTokens,
+      designSystem,
+      colorMode,
+      components,
       designRules = [],
       decisions = [],
       onStreamDelta,
@@ -56,7 +69,24 @@ export class PipelineExecutor {
       };
     }
 
-    // 2. Context Enrichment (ISSUE-011 + ISSUE-012 + D18 + D20)
+    // 2. System Prompt 组装 (ISSUE-015)
+    // 意图在第 1 步才确定，故 Prompt 必须在此处构建，才能保住 T-AE-10 的
+    // 按意图条件注入粒度（Few-Shot 仅 create_screen、改主题/提问零美学层）。
+    const systemPrompt = designSystem
+      ? PromptBuilder.buildSystemPrompt({
+          designSystem,
+          deviceProfile,
+          frameWidth,
+          colorMode,
+          components,
+          designRules,
+          decisions,
+          intent: intentResult.intent,
+          hasAttachment: Boolean(input.attachment)
+        })
+      : baseSystemPrompt;
+
+    // 3. Context Enrichment (ISSUE-011 + ISSUE-012 + D18 + D20)
     const enriched = enrichContext({
       rawPrompt: input.rawPrompt,
       intent: intentResult.intent,
@@ -64,7 +94,7 @@ export class PipelineExecutor {
       screens,
       deviceProfile,
       frameWidth,
-      baseSystemPrompt,
+      baseSystemPrompt: systemPrompt,
       attachment: input.attachment,
       designRules,
       decisions

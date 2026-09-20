@@ -12,11 +12,95 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3, 12px);
-  height: 44px;
+  min-height: 48px;
+  height: 48px;
   padding-left: var(--space-4, 16px);
   padding-right: var(--space-4, 16px);
   background-color: var(--color-surface, #ffffff);
   border-bottom: 1px solid var(--color-border, #e2e8f0);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+  box-sizing: border-box;
+}
+
+/* 结合安全区时的沉浸式标题栏：顶部预留 44px 状态栏，内容区固定保持 48px 且垂直居中 */
+.appbar.safe-top,
+.safe-top > .appbar,
+.safe-top .appbar {
+  padding-top: 44px;
+  min-height: calc(44px + 48px);
+  height: calc(44px + 48px);
+}
+
+/* 标题栏内部所有直接子元素：强制在 48px 内容区内严格垂直居中 */
+.appbar > * {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  line-height: 1;
+}
+
+/* 标题栏标题：严格垂直居中与水平居中，单行截断，保证不挤压操作按钮 */
+.appbar > h1,
+.appbar > h2,
+.appbar > h3,
+.appbar > h4,
+.appbar > p,
+.appbar > span:not(.tap-target) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-md, 16px);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-primary, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  flex: 1;
+}
+
+/* 标题栏操作按钮 / 触控区：标准 40px 高度与触控区，内部图标严格居中 */
+.appbar > .tap-target,
+.appbar > .btn,
+.appbar > button,
+.appbar > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary, #0f172a);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.appbar > .tap-target svg,
+.appbar > .btn svg,
+.appbar > button svg,
+.appbar > a svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  margin: auto;
+}
+
+/* 标题栏后紧邻的主体容器：清除可能导致上浮重叠的负外边距 */
+.appbar + * {
+  margin-top: 0 !important;
+  position: relative;
+  z-index: 1;
 }
 
 /* 底部标签导航：4~5 项，图标 + 10~11px 文字 */
@@ -26,6 +110,9 @@
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-border, #e2e8f0);
   padding-bottom: 34px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
 }
 .tabbar > .tabbar-item {
   flex: 1 1 0%;
@@ -50,6 +137,9 @@
   padding: var(--space-3, 12px) var(--space-4, 16px) calc(var(--space-3, 12px) + 34px);
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-border, #e2e8f0);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
 }
 .cta-fixed > .btn {
   flex: 1 1 0%;

@@ -1,0 +1,275 @@
+import { useProjectStore } from '../../stores/useProjectStore';
+import { useHistoryStore } from '../../stores/useHistoryStore';
+import { NidEngine } from '../../utils/nidEngine';
+import { patchElementByNid } from '../../utils/domPatcher';
+
+export type CanvasToolCall =
+  | {
+      tool: 'create_screen';
+      params: {
+        title: string;
+        html: string;
+        screenId?: string;
+        referencedScreenId?: string;
+      };
+    }
+  | {
+      tool: 'modify_screen';
+      params: {
+        screenId: string;
+        title?: string;
+        html: string;
+      };
+    }
+  | {
+      tool: 'patch_element';
+      params: {
+        screenId: string;
+        nid: string;
+        elementHtml: string;
+      };
+    }
+  | {
+      tool: 'update_theme';
+      params: {
+        tokens: Record<string, any>;
+        reason?: string;
+      };
+    };
+
+export interface CanvasToolExecutionResult {
+  success: boolean;
+  tool: CanvasToolCall['tool'];
+  status: 'screen_created' | 'screen_modified' | 'screen_staged' | 'element_patched' | 'theme_updated' | 'failed';
+  screenId?: string;
+  screenName?: string;
+  candidateHtml?: string;
+  checkpointId?: string;
+  error?: string;
+}
+
+/**
+ * 智能清洗与精炼页面标题 (贴切同时尽量简短，不超过 20 汉字)
+ */
+export function sanitizeScreenTitle(rawTitle?: string): string {
+  if (!rawTitle) return '新页面';
+  let t = rawTitle.trim();
+
+  // 1. 去除常见的 AI 后缀和括号标记: (AI 方案), (AI), [新版], （测试）等
+  t = t.replace(/\s*[\(（\[【](?:AI|新版|方案|候选|草稿).*?[\)）\]】]/gi, '').trim();
+
+  // 2. 去除冗余的业务前缀，如 "页面: ", "设计: "
+  t = t.replace(/^(?:页面|设计|原型)[:：\s]*/, '');
+
+  // 3. 极端长标题截断保底（不超过 20 个字符）
+  if (t.length > 20) {
+    t = t.slice(0, 20);
+  }
+
+  return t.trim() || '新页面';
+}
+
+/**
+ * 统一画布工具执行器 (KISS 原则 / Canvas Tools)
+ *
+ * 所有对画板的写操作统一经由本执行器派发，
+ * 集中管理画框排布坐标、历史栈 Checkpoint 与 D17 并排比选 Staging。
+ */
+export class CanvasToolExecutor {
+  /**
+   * 执行指定的画布工具动作
+   */
+  static execute(call: CanvasToolCall): CanvasToolExecutionResult {
+    const store = useProjectStore.getState();
+    const history = useHistoryStore.getState();
+
+    try {
+      switch (call.tool) {
+        case 'create_screen': {
+          const { title, html, screenId, referencedScreenId } = call.params;
+          const currentScreens = store.screens;
+          const allScreens = Object.values(currentScreens);
+
+          const formattedHtml = NidEngine.injectNids(html);
+          const rawTitle = title?.trim() || `画框 ${allScreens.length + 1}`;
+          const finalTitle = sanitizeScreenTitle(rawTitle);
+          const targetCustomId = screenId && !currentScreens[screenId] ? screenId : undefined;
+
+          // 使用 store.addScreen 的智能布局引擎排布坐标与避让
+          const newId = store.addScreen(
+            {
+              name: finalTitle,
+              htmlContent: formattedHtml
+            },
+            targetCustomId,
+            { referencedScreenId }
+          );
+
+          const checkpointId = history.addCheckpoint(`AI 新建页面: ${finalTitle}`, {
+            screenId: newId,
+            htmlContent: formattedHtml
+          });
+
+          store.panToScreen(newId);
+
+          return {
+            success: true,
+            tool: 'create_screen',
+            status: 'screen_created',
+            screenId: newId,
+            screenName: finalTitle,
+            checkpointId
+          };
+        }
+
+        case 'modify_screen': {
+          const { screenId, title, html } = call.params;
+          const target = store.screens[screenId];
+          if (!target) {
+            return {
+              success: false,
+              tool: 'modify_screen',
+              status: 'failed',
+              error: `目标画框不存在: ${screenId}`
+            };
+          }
+
+          const formattedHtml = NidEngine.injectNids(html);
+          const isGenericTitle =
+            !title ||
+            ['画框', '新页面', '新设计页', '未命名', '新画框'].includes(title.trim()) ||
+            title.trim().startsWith('画框 ');
+          const finalTitle = isGenericTitle ? target.name : (title || target.name);
+
+          // 自动建立历史检查点备份，保障随时一键回退
+          const checkpointId = history.addCheckpoint(`AI 修改画框: ${target.name}`, {
+            screenId: target.id,
+            htmlContent: target.htmlContent
+          });
+
+          // 直接原地更新目标画框内容 (BR-CR-04: 绝不生成分离候选画框)
+          store.updateScreenHtml(target.id, formattedHtml, `AI 修改页面: ${finalTitle}`);
+          if (title && title !== target.name && !isGenericTitle) {
+            store.renameScreen(target.id, title);
+          }
+
+          // 清理可能存在的 staging
+          if (store.stagedScreen) {
+            store.discardStagedChange();
+          }
+
+          // 视口平移聚焦至已修改的目标画框
+          store.panToScreen(target.id);
+
+          return {
+            success: true,
+            tool: 'modify_screen',
+            status: 'screen_modified',
+            screenId: target.id,
+            screenName: finalTitle,
+            checkpointId
+          };
+        }
+
+        case 'patch_element': {
+          const { screenId, nid, elementHtml } = call.params;
+          const target = store.screens[screenId];
+          if (!target) {
+            return {
+              success: false,
+              tool: 'patch_element',
+              status: 'failed',
+              error: `目标画框不存在: ${screenId}`
+            };
+          }
+
+          // 外科手术式局部 DOM 补丁
+          const patchResult = patchElementByNid(target.htmlContent, nid, elementHtml);
+          if (!patchResult.success) {
+            return {
+              success: false,
+              tool: 'patch_element',
+              status: 'failed',
+              error: patchResult.error || '局部元素补丁失败'
+            };
+          }
+
+          const tagLabel = patchResult.replacedTagName || nid;
+          const checkpointId = history.addCheckpoint(`修改元素 <${tagLabel}>: ${target.name}`, {
+            screenId: target.id,
+            htmlContent: target.htmlContent
+          });
+
+          // 直接原地更新画框内容
+          store.updateScreenHtml(
+            target.id,
+            patchResult.html,
+            `局部修改元素 <${tagLabel}>`
+          );
+
+          if (store.stagedScreen) {
+            store.discardStagedChange();
+          }
+
+          store.panToScreen(target.id);
+          store.selectNodeByNid(target.id, nid);
+
+          return {
+            success: true,
+            tool: 'patch_element',
+            status: 'element_patched',
+            screenId: target.id,
+            screenName: target.name,
+            checkpointId
+          };
+        }
+
+        case 'update_theme': {
+          const { tokens, reason } = call.params;
+          // 合并设计系统 Tokens
+          store.setDesignSystem({
+            ...store.designSystem,
+            tokens: {
+              ...store.designSystem.tokens,
+              ...tokens
+            }
+          });
+
+          const activeScreen = store.activeScreenId
+            ? store.screens[store.activeScreenId]
+            : Object.values(store.screens)[0];
+
+          const checkpointId = history.addCheckpoint(
+            `AI 调整主题: ${reason || 'Token 预设更新'}`,
+            {
+              screenId: activeScreen?.id || 'global_theme',
+              htmlContent: activeScreen?.htmlContent || ''
+            }
+          );
+
+          return {
+            success: true,
+            tool: 'update_theme',
+            status: 'theme_updated',
+            checkpointId
+          };
+        }
+
+        default:
+          return {
+            success: false,
+            tool: (call as any).tool,
+            status: 'failed',
+            error: `未知工具类型: ${(call as any).tool}`
+          };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        tool: call.tool,
+        status: 'failed',
+        error: err?.message || '画布工具执行异常'
+      };
+    }
+  }
+}

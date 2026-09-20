@@ -37,14 +37,17 @@ const PC_RULES = `DEVICE RULES — PC (1440px):
 - Navigation: top bar and/or left sidebar.`;
 
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
-- SINGLE COLUMN ONLY. NEVER use .grid-2 / .grid-3 / .grid-4 / .grid-5 / .grid-6 — at 390px they crush content into unreadable slivers. When items must sit side by side, use .scroll-x (horizontal snap scrolling).
+- SINGLE COLUMN ONLY for the main content vertical flow. Avoid wide data tables or heavy desktop grids; for compact feature cards, quick actions, or metric badges, 2 or 3 items side by side (.grid-2, .grid-3, or .row.gap-2 with .flex-1) are appropriate. For long lists of horizontal cards, use .scroll-x.
 - NO HOVER STATES. Touch screens never fire hover, and no hover utility exists in this profile's whitelist. Never write a :hover rule or reference a hover class. Express affordance through spacing, dividers, borders and .badge-soft instead.
 - Page section spacing: .mt-4 / .mt-6 (NOT .mt-8); page padding .p-4 / .px-4 (NOT .p-8).
 - Card padding: .p-3 / .p-4. Body text: .text-md (16px) — 14px is too small on a phone.
 - TOUCH TARGETS: inputs use .input .input-touch (48px). Any icon-only button must carry .tap-target (44x44 minimum).
 - SAFE AREAS: use .safe-top (44px status bar) and .safe-bottom (34px home indicator) — never let content sit flush against the screen edges.
-- STRUCTURE: use .appbar for the top title bar, .tabbar with .tabbar-item for bottom navigation (mark the current one .is-active), .list-item for list rows, and .cta-fixed for the primary bottom action button.
-- The primary action belongs in .cta-fixed at the bottom, not inline in the form.`;
+- STRUCTURE & APPBAR (STRICT LAYOUT CONTRACT):
+  * Top navigation: When an app bar is needed, use .appbar (or .appbar .safe-top). Buttons and title inside .appbar MUST be strictly vertically centered (use .tap-target for back/close/actions, and a centered title like <span class="text-md font-semibold">标题</span>). For landing/login pages with an ambient hero banner, content can begin directly on the page background without an app bar.
+  * BODY CONTAINMENT & NO OVERLAP: The page body must sit in its own container directly below .appbar. Body content MUST NEVER overlap with or slide under the .appbar. Never use negative margins (e.g. -mt-*) on elements below .appbar.
+  * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
+  * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!`;
 
 export function getDeviceAestheticRules(device: DeviceProfile): string {
   return device === 'pc' ? PC_RULES : MOBILE_RULES;

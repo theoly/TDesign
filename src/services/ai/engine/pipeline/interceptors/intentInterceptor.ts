@@ -11,7 +11,8 @@ export interface IntentAnalysisResult {
 
 const STRUCTURAL_CHANGE_KEYWORDS = [
   '新增', '加一个', '添加', '删除', '去掉', '补充', '移除', '插一个',
-  'add', 'remove', 'delete', 'insert', 'append'
+  '填充', '替换', '重构', '换成', '做成', '重做', '插入',
+  'add', 'remove', 'delete', 'insert', 'append', 'replace', 'refactor', 'fill'
 ];
 
 export function analyzePipelineIntent(
@@ -21,7 +22,8 @@ export function analyzePipelineIntent(
   const classified = classifyIntent(input.rawPrompt, Boolean(input.activeScreenId));
   const rawLower = input.rawPrompt.toLowerCase();
 
-  const hasExplicitStructuralChangeIntent = STRUCTURAL_CHANGE_KEYWORDS.some((kw) =>
+  const hasElementRef = input.rawPrompt.includes('[引用元素') || input.rawPrompt.includes('nid=');
+  const hasExplicitStructuralChangeIntent = hasElementRef || STRUCTURAL_CHANGE_KEYWORDS.some((kw) =>
     rawLower.includes(kw.toLowerCase())
   );
 

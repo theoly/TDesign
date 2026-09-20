@@ -82,14 +82,19 @@ describe('ISSUE-014 画布 LOD 重挂载与主题底色回归', () => {
     expect(st.selectedNode?.tagName).toBe('h1');
   });
 
-  test('缺陷 1：缩小至 L0 再放大回 L2 后，画框仍必须可点选（iframe 重挂载需重新绑定监听）', async () => {
+  /**
+   * ⚠️ [DEPRECATED 2026-09-17] 原 "无条件 scale < 0.25 卸载 iframe 并展示文本占位符" 行为已过时。
+   * - 替代方案: doc/feature/canvas-artboard-header-and-naming/spec.md
+   * - 废弃原因: 用户反馈缩小至一定比例后页面信息完全不可见。新规则在无位图缩略图时保持 L1 iframe 呈现。
+   */
+  test('缩放交互：缩小至 scale < 0.25 后再放大回 L2，画框始终保持高保真且可点选', async () => {
     await mount();
 
-    // 缩小到 scale < 0.25 -> LOD 0，iframe 被卸载
+    // 缩小到 scale < 0.25 -> 保持 L1 冻结渲染，iframe 绝不被替换为白板占位，页面信息完全可见
     await setScale(0.2);
-    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('iframe')).not.toBeNull();
 
-    // 放大回来 -> LOD 2，React 挂载的是一个全新的 iframe 元素
+    // 放大回来 -> L2，点击依然正常生效
     await setScale(1);
     expect(container.querySelector('iframe')).not.toBeNull();
 
@@ -112,11 +117,32 @@ describe('ISSUE-014 画布 LOD 重挂载与主题底色回归', () => {
     expect(shell.style.background.toLowerCase()).toBe(darkBg.toLowerCase());
   });
 
-  test('缺陷 2：L0 占位层底色必须跟随明暗模式', async () => {
-    await mount('dark');
-    await setScale(0.2);
+  test('缺陷 2：L0 降级档位底色必须跟随明暗模式', async () => {
+    // 显式测试 ScreenFrame 在 lodLevel === 0 降级分支下的 Token 底色
+    useProjectStore.setState({
+      settings: { ...useProjectStore.getState().settings, colorMode: 'dark' }
+    });
+    const { ScreenFrame } = await import('../src/components/canvas/ScreenFrame');
+    const testContainer = document.createElement('div');
+    document.body.appendChild(testContainer);
+    const testRoot = createRoot(testContainer);
 
-    const placeholder = Array.from(container.querySelectorAll('div')).find(
+    await act(async () => {
+      testRoot.render(
+        <ScreenFrame
+          screen={{
+            id: 's-l0',
+            name: 'L0 测试画框',
+            htmlContent: '<div>L0</div>',
+            position: { x: 0, y: 0 },
+            measuredHeight: 600
+          } as any}
+          lodLevel={0}
+        />
+      );
+    });
+
+    const placeholder = Array.from(testContainer.querySelectorAll('div')).find(
       (d) => d.className.includes('font-mono') && d.textContent?.includes('L0 位图降级缩略视图')
     ) as HTMLElement;
     expect(placeholder).toBeDefined();
@@ -124,6 +150,9 @@ describe('ISSUE-014 画布 LOD 重挂载与主题底色回归', () => {
 
     const darkBg = useProjectStore.getState().designSystem.tokens.colors.background.dark;
     expect(placeholder.style.background.toLowerCase()).toBe(darkBg.toLowerCase());
+
+    act(() => testRoot.unmount());
+    testContainer.remove();
   });
 
   test('短内容页不得漏出壳层底色：根元素必须带 Token 底色且不干扰高度测量', async () => {

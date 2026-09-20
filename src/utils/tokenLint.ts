@@ -42,7 +42,7 @@ export class TokenLintEngine {
       }
 
       totalNodes++;
-      const nidMatch = attrs.match(/data-nid=["']([a-zA-Z0-9]+)["']/);
+      const nidMatch = attrs.match(/data-nid=["']([^"']+)["']/);
       const nid = nidMatch ? nidMatch[1] : 'unknown';
 
       // 1. Check for literal hex or rgb colors in inline style
@@ -201,3 +201,129 @@ export function computeRetraceability(
     screens: perScreen
   };
 }
+
+export interface LocateTarget {
+  type: 'element' | 'block' | 'screen';
+  screenId: string;
+  screenName: string;
+  nid?: string;
+  tagName?: string;
+  label: string;
+}
+
+export interface ScreenAuditReport {
+  screenId: string;
+  screenName: string;
+  complianceRate: number;
+  totalNodes: number;
+  issues: LintIssue[];
+  targetToLocate: LocateTarget;
+}
+
+/**
+ * 计算页面的 Token 规范评测报告与智能定位目标
+ * - 若页面只有 1 个逃逸元素：定位该具体元素
+ * - 若页面有多个逃逸元素：定位包含多个元素的最小父区块（LCA），若无独立区块则定位该页面
+ */
+export function computeScreenAuditReport(
+  screen: { id: string; name: string; htmlContent: string },
+  designSystem: DesignSystem,
+  deviceProfile: DeviceProfile = 'pc'
+): ScreenAuditReport {
+  const lint = TokenLintEngine.scan(screen.htmlContent, designSystem, deviceProfile);
+  const issues = lint.issues;
+  const distinctNids = Array.from(new Set(issues.map((i) => i.nid).filter((n) => n && n !== 'unknown')));
+
+  let targetToLocate: LocateTarget;
+
+  if (distinctNids.length === 0) {
+    targetToLocate = {
+      type: 'screen',
+      screenId: screen.id,
+      screenName: screen.name,
+      label: `定位该页面: ${screen.name} (完全合规)`
+    };
+  } else if (distinctNids.length === 1) {
+    // 只有单个元素逃逸，定位具体元素
+    const singleNid = distinctNids[0];
+    const firstIssue = issues.find((i) => i.nid === singleNid);
+    const tag = firstIssue?.tagName || 'element';
+    targetToLocate = {
+      type: 'element',
+      screenId: screen.id,
+      screenName: screen.name,
+      nid: singleNid,
+      tagName: tag,
+      label: `定位逃逸元素: <${tag}> (nid: ${singleNid})`
+    };
+  } else {
+    // 页面有多个元素逃逸：定位包含多个元素的最小父区块，或只定位该页面
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${screen.htmlContent}</body>`, 'text/html');
+    const domElements = distinctNids
+      .map((nid) => doc.querySelector(`[data-nid="${nid}"]`))
+      .filter((el): el is Element => el !== null);
+
+    if (domElements.length <= 1) {
+      targetToLocate = {
+        type: 'screen',
+        screenId: screen.id,
+        screenName: screen.name,
+        label: `定位该页面: ${screen.name}`
+      };
+    } else {
+      // 计算 Lowest Common Ancestor (LCA)
+      let lca: Element | null = domElements[0].parentElement;
+      for (let i = 1; i < domElements.length; i++) {
+        const el = domElements[i];
+        while (lca && !lca.contains(el)) {
+          lca = lca.parentElement;
+        }
+      }
+
+      // 寻找 lca 向上或本身具备 data-nid 且非 body/html 的父区块
+      let parentBlock: Element | null = null;
+      let cur: Element | null = lca;
+      while (cur && cur !== doc.body && cur.tagName.toLowerCase() !== 'html') {
+        if (cur.getAttribute('data-nid')) {
+          parentBlock = cur;
+          break;
+        }
+        cur = cur.parentElement;
+      }
+
+      if (parentBlock) {
+        const blockNid = parentBlock.getAttribute('data-nid')!;
+        const blockTag = parentBlock.tagName.toLowerCase();
+        const classAttr = parentBlock.getAttribute('class');
+        const classSnippet = classAttr ? `.${classAttr.trim().split(/\s+/)[0]}` : '';
+        targetToLocate = {
+          type: 'block',
+          screenId: screen.id,
+          screenName: screen.name,
+          nid: blockNid,
+          tagName: blockTag,
+          label: `定位包含 ${distinctNids.length} 个逃逸点的父区块: <${blockTag}${classSnippet}> (nid: ${blockNid})`
+        };
+      } else {
+        // 无单一包含容器（如跨越顶部导航与底部页脚），定位该页面整体
+        targetToLocate = {
+          type: 'screen',
+          screenId: screen.id,
+          screenName: screen.name,
+          label: `定位该页面: ${screen.name} (逃逸点分散在多处)`
+        };
+      }
+    }
+  }
+
+  return {
+    screenId: screen.id,
+    screenName: screen.name,
+    complianceRate: lint.complianceRate,
+    totalNodes: lint.totalNodes,
+    issues,
+    targetToLocate
+  };
+}
+

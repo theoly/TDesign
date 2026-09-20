@@ -33,6 +33,8 @@ export interface ProjectMeta {
    * 未设置时表示该工程仍是尚未迁移的 localStorage 工程。
    */
   folderPath?: string;
+  /** 自定义工程封面图片 DataURL */
+  coverImage?: string;
 }
 
 /** 工程是否已迁移至文件夹 */

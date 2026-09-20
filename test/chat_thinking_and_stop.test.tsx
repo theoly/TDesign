@@ -36,7 +36,10 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
     root = createRoot(container);
   });
 
+  const originalStream = AIService.stream;
+
   afterEach(() => {
+    AIService.stream = originalStream;
     act(() => {
       root.unmount();
     });
@@ -170,46 +173,5 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
     // The button transitions back to regular send button
     const restoredSendBtn = container.querySelector('button[title*="发送设计诉求"]');
     expect(restoredSendBtn).not.toBeNull();
-  });
-
-  describe('extractHtml & Semantic Tag Screen Creation', () => {
-    const { extractHtml } = require('../src/components/chat/ChatDrawer');
-
-    test('extracts HTML from standard markdown code block', () => {
-      const raw = '好的，这是为您设计的登录页：\n```html\n<form class="card p-6">\n  <input type="tel" />\n</form>\n```\n希望对您有帮助！';
-      const extracted = extractHtml(raw);
-      expect(extracted).not.toBeNull();
-      expect(extracted).toContain('<form class="card p-6">');
-      expect(extracted).not.toContain('好的，这是为您设计的');
-      expect(extracted).not.toContain('```');
-    });
-
-    test('extracts HTML with <main> or <section> or unclosed code block', () => {
-      // Unclosed code block cut off by token limit
-      const unclosed = '```html\n<main class="min-h-screen p-4">\n  <div class="row">Hello</div>';
-      const extracted = extractHtml(unclosed);
-      expect(extracted).not.toBeNull();
-      expect(extracted).toContain('<main class="min-h-screen p-4">');
-    });
-
-    test('extracts direct HTML when model omits markdown backticks', () => {
-      const raw = '<div class="card p-4"><h3>登录</h3><input class="input" /></div>';
-      const extracted = extractHtml(raw);
-      expect(extracted).toBe(raw);
-    });
-
-    test('strips <think> tags before extracting HTML', () => {
-      const raw = '<think>用户想要一个登录页面，需要包含手机号和验证码。</think>\n```html\n<form class="card">\n  <input />\n</form>\n```';
-      const extracted = extractHtml(raw);
-      expect(extracted).not.toBeNull();
-      expect(extracted).toContain('<form class="card">');
-      expect(extracted).not.toContain('用户想要一个登录页面');
-    });
-
-    test('returns null when model gives conversational response without HTML', () => {
-      const conversational = '请问您需要使用浅色主题还是深色主题？需要支持微信第三方登录吗？';
-      const extracted = extractHtml(conversational);
-      expect(extracted).toBeNull();
-    });
   });
 });

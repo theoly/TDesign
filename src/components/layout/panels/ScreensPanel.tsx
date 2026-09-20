@@ -11,11 +11,11 @@ export const ScreensPanel: React.FC = () => {
     activeScreenId,
     settings,
     setActiveScreen,
-    addScreen,
+    panToScreen,
+    addBlankScreen,
     removeScreen,
     duplicateScreen,
-    renameScreen,
-    setViewportTransform
+    renameScreen
   } = useProjectStore();
 
   const [search, setSearch] = useState('');
@@ -26,39 +26,11 @@ export const ScreensPanel: React.FC = () => {
   });
 
   const handleAddNewScreen = () => {
-    const count = screenOrder.length;
-    const name = `页面 ${count + 1}`;
-    addScreen({
-      name,
-      position: { x: 100 + count * (settings.frameWidth + 120), y: 120 },
-      htmlContent: `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
-  <div class="card p-6 r-lg shadow-md col gap-4" style="background: var(--color-surface);">
-    <h2 class="text-2xl font-bold">${name}</h2>
-    <p class="text-sm text-secondary">空白画框。在对话面板描述需求，或直接用检查器排版。</p>
-    <div class="row gap-3 mt-2">
-      <button class="btn btn-primary r-md">主要操作</button>
-      <button class="btn btn-ghost r-md">次要操作</button>
-    </div>
-  </div>
-</div>`
-    });
-    setViewportTransform({
-      x: -(100 + count * (settings.frameWidth + 120)) * 0.7 + 200,
-      y: 60,
-      scale: 0.7
-    });
+    addBlankScreen();
   };
 
   const handleSelectScreen = (id: string) => {
-    setActiveScreen(id);
-    const s = screens[id];
-    if (s) {
-      setViewportTransform({
-        x: -s.position.x * 0.7 + 200,
-        y: -s.position.y * 0.7 + 100,
-        scale: 0.7
-      });
-    }
+    panToScreen(id);
   };
 
   return (

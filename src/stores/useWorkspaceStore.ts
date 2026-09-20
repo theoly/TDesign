@@ -27,6 +27,13 @@ function resetHistory(): void {
   useHistoryStore.setState({ past: [], future: [], checkpoints: [] });
 }
 
+export interface OpenLocalFolderResult {
+  ok: boolean;
+  message: string;
+  notProject?: boolean;
+  folderPath?: string;
+}
+
 interface WorkspaceState {
   view: AppView;
   projects: ProjectMeta[];
@@ -35,7 +42,7 @@ interface WorkspaceState {
   missingIds: string[];
 
   refresh: () => void;
-  createProject: (name: string, deviceProfile: 'pc' | 'mobile', designSystem: DesignSystem, initialDecisions?: string[]) => void;
+  createProject: (name: string, deviceProfile: 'pc' | 'mobile', designSystem: DesignSystem, initialDecisions?: string[], folderPath?: string) => void;
   openProject: (id: string) => boolean;
   backToManager: () => void;
   renameProject: (id: string, name: string) => void;
@@ -43,7 +50,7 @@ interface WorkspaceState {
   deleteProject: (id: string) => void;
 
   /** 打开任意本地 *.aidesign 工程文件夹 (T-AE-43 / PRD §3.0.1) */
-  openLocalFolder: () => Promise<{ ok: boolean; message: string }>;
+  openLocalFolder: () => Promise<OpenLocalFolderResult>;
   /** 把仍在 localStorage 的工程迁移至文件夹 (T-AE-42) */
   migrateProject: (id: string) => Promise<{ ok: boolean; message: string }>;
   /** 上次异常退出的检测结果 (T-AE-44 / PRD §3.8.5) */
@@ -62,7 +69,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   /**
    * 打开本地工程文件夹 (T-AE-43)。
-   * 目录结构不完整时给出明确错误，而非静默失败成一个空工程。
+   * 目录结构不完整时给出明确标记与引导信息，支持无缝衔接新建工程。
    */
   openLocalFolder: async () => {
     if (!isDesktopRuntime()) {
@@ -74,7 +81,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const storage = createProjectStorage('external', folderPath);
     const repo = new ProjectRepository(storage);
     if (!(await repo.isValidProjectFolder())) {
-      return { ok: false, message: `所选文件夹缺少 project.json，不是有效的工程目录：${folderPath}` };
+      return {
+        ok: false,
+        notProject: true,
+        folderPath,
+        message: `所选文件夹缺少 project.json，不是有效的工程目录：${folderPath}`
+      };
     }
 
     const doc = await repo.load();
@@ -135,13 +147,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const projects = listProjects();
     set({
       projects,
-      missingIds: projects.filter((p) => !projectExists(p.id)).map((p) => p.id)
+      // 文件夹工程（有 folderPath）的数据存在本地文件系统而非 localStorage，
+      // projectExists 只检查 localStorage，不适用于文件夹工程。
+      // 此处只将「无 folderPath 且 localStorage 中无数据」的工程标记为丢失，
+      // 文件夹工程打开时才会真正验证数据完整性。
+      missingIds: projects
+        .filter((p) => !p.folderPath && !projectExists(p.id))
+        .map((p) => p.id)
     });
   },
 
-  createProject: (name, deviceProfile, designSystem, initialDecisions) => {
+  createProject: (name, deviceProfile, designSystem, initialDecisions, folderPath) => {
     resetHistory();
-    const id = useProjectStore.getState().initNewProject({ name, deviceProfile, designSystem, initialDecisions });
+    const id = useProjectStore.getState().initNewProject({ name, deviceProfile, designSystem, initialDecisions, folderPath });
     get().refresh();
     set({ activeProjectId: id, view: 'workspace' });
   },

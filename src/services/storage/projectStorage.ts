@@ -9,6 +9,9 @@
  * 上层不该知道自己写的是文件还是 localStorage。
  */
 
+import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
+import { isDesktopRuntime } from './folderPicker';
+
 export interface ProjectStorage {
   readonly kind: 'folder' | 'localStorage';
   ensureDir(rel: string): Promise<void>;
@@ -22,6 +25,7 @@ export interface ProjectStorage {
   readTailLines(rel: string, limit: number): Promise<string[]>;
   readAllLines(rel: string): Promise<string[]>;
   writeBinary(rel: string, base64Data: string): Promise<void>;
+  readBinary(rel: string): Promise<string | null>;
   listDir(rel: string): Promise<string[]>;
   remove(rel: string): Promise<void>;
 }
@@ -29,8 +33,25 @@ export interface ProjectStorage {
 type Invoke = <T>(cmd: string, args: Record<string, unknown>) => Promise<T>;
 
 function getInvoke(): Invoke | null {
-  const w = globalThis as unknown as { __TAURI__?: { core?: { invoke?: Invoke } } };
-  return w.__TAURI__?.core?.invoke ?? null;
+  if (!isDesktopRuntime()) return null;
+  try {
+    if (isTauri()) {
+      return tauriInvoke as Invoke;
+    }
+  } catch {
+    // 环境缺少 window.__TAURI_INTERNALS__ 时安全捕获
+  }
+  const w = globalThis as unknown as {
+    __TAURI_INTERNALS__?: { invoke?: Invoke };
+    __TAURI__?: { core?: { invoke?: Invoke } };
+  };
+  if (w.__TAURI__?.core?.invoke) {
+    return w.__TAURI__.core.invoke;
+  }
+  if (w.__TAURI_INTERNALS__?.invoke) {
+    return (cmd, args) => w.__TAURI_INTERNALS__!.invoke!(cmd, args);
+  }
+  return tauriInvoke as Invoke;
 }
 
 /** 工程文件夹实现（Tauri 运行时） */
@@ -54,6 +75,9 @@ export class TauriFolderStorage implements ProjectStorage {
   readAllLines(rel: string) { return this.invoke<string[]>('project_read_all_lines', { root: this.root, rel }); }
   writeBinary(rel: string, base64Data: string) {
     return this.invoke<void>('project_write_binary', { root: this.root, rel, base64Data });
+  }
+  readBinary(rel: string) {
+    return this.invoke<string | null>('project_read_binary', { root: this.root, rel });
   }
   listDir(rel: string) { return this.invoke<string[]>('project_list_dir', { root: this.root, rel }); }
   remove(rel: string) { return this.invoke<void>('project_delete', { root: this.root, rel }); }
@@ -114,6 +138,10 @@ export class LocalStorageStorage implements ProjectStorage {
   }
 
   async writeBinary(rel: string, base64Data: string) { this.setItem(rel, base64Data); }
+
+  async readBinary(rel: string): Promise<string | null> {
+    return localStorage.getItem(this.key(rel));
+  }
 
   async listDir(rel: string) {
     const p = `${this.prefix}:${rel.replace(/\/$/, '')}/`;

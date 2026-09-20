@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { ScreenFrame } from './ScreenFrame';
-import { Check, Copy, Map, X } from 'lucide-react';
+import { Check, Copy, Map, Plus, Sparkles, X } from 'lucide-react';
 
 interface InfiniteCanvasProps {
   /** T-AE-26: 单画框质感润色入口，由 App 层承接以复用 RestylePanel */
@@ -27,7 +27,8 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     stagedScreen,
     adoptStagedChange,
     discardStagedChange,
-    keepBothScreens
+    keepBothScreens,
+    activeSnapGuides
   } = useProjectStore();
 
   const { x, y, scale } = viewportTransform;
@@ -71,6 +72,23 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       if ((e.metaKey || e.ctrlKey) && e.key === '-') {
         e.preventDefault();
         setViewportTransform({ x, y, scale: Math.max(scale * 0.85, 0.1) });
+      }
+
+      // Delete / Backspace: 快捷删除选中节点及其全部子树 (ISSUE-021 / T-DNC-04)
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !e.metaKey && !e.ctrlKey) {
+        const activeEl = document.activeElement;
+        const isEditingInput =
+          activeEl &&
+          (activeEl.tagName === 'INPUT' ||
+            activeEl.tagName === 'TEXTAREA' ||
+            (activeEl as HTMLElement).isContentEditable);
+        if (!isEditingInput) {
+          const { activeScreenId, selectedNid, deleteNode } = useProjectStore.getState();
+          if (activeScreenId && selectedNid) {
+            e.preventDefault();
+            deleteNode(activeScreenId, selectedNid);
+          }
+        }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -170,12 +188,12 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           if (!screen) return null;
           const isActive = id === activeScreenId;
 
-          // LOD determination:
-          // scale < 0.25 -> L0
-          // isActive -> L2
-          // else -> L1
+          // LOD 调度策略：
+          // isActive -> L2 (可交互 iframe: 点选、行内编辑)
+          // else -> L1 (冻结 iframe: pointer-events: none，GPU 硬件加速高质量缩放，确保缩小时页面内容高保真可见)
+          // 仅在存在预先生成的位图缩略图且超小比例时降级为 L0
           let lodLevel: 0 | 1 | 2 = 1;
-          if (scale < 0.25) lodLevel = 0;
+          if (screen.thumbnail && scale < 0.25) lodLevel = 0;
           else if (isActive) lodLevel = 2;
 
           return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish} />;
@@ -198,6 +216,40 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
             lodLevel={2}
             isStaged={true}
           />
+        )}
+
+        {/* 对齐吸附网格参考线 (BR-ALIGN-01 ~ BR-ALIGN-03) */}
+        {activeSnapGuides && activeSnapGuides.active && (
+          <div className="absolute inset-0 pointer-events-none z-50">
+            {activeSnapGuides.horizontalY !== undefined && (
+              <div
+                data-testid="snap-guide-horizontal"
+                className="absolute left-[-10000px] border-t-2 border-dashed border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)] flex items-center"
+                style={{
+                  top: `${activeSnapGuides.horizontalY}px`,
+                  width: '40000px'
+                }}
+              >
+                <div className="ml-[10080px] -mt-6 bg-sky-600/90 text-sky-100 text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-sm border border-sky-400/40">
+                  同行顶部对齐 Y: {activeSnapGuides.horizontalY}px
+                </div>
+              </div>
+            )}
+            {activeSnapGuides.verticalX !== undefined && (
+              <div
+                data-testid="snap-guide-vertical"
+                className="absolute top-[-10000px] border-l-2 border-dashed border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)] flex flex-col"
+                style={{
+                  left: `${activeSnapGuides.verticalX}px`,
+                  height: '40000px'
+                }}
+              >
+                <div className="mt-[10080px] ml-2 bg-sky-600/90 text-sky-100 text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-sm border border-sky-400/40 whitespace-nowrap">
+                  同列对齐 X: {activeSnapGuides.verticalX}px
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -311,6 +363,30 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           </div>
         )}
       </div>
+
+      {/* 纯净工作区空画布引导 (OpenDesign / PRD 体验升级) */}
+      {screenOrder.length === 0 && !stagedScreen && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none p-4">
+          <div className="max-w-md w-full p-6 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md text-center shadow-2xl pointer-events-auto">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-gradient-to-tr from-blue-600/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-3.5 shadow-inner">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-100">纯净工作区 · 准备就绪</h3>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              在右侧对话框输入界面描述（如：“生成一个现代科技风的控制台仪表盘”），AI 将直接生成设计画框；或手动添加空白画框开始。
+            </p>
+            <div className="mt-5 flex items-center justify-center gap-2.5">
+              <button
+                onClick={() => useProjectStore.getState().addBlankScreen()}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>新建空白画框</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

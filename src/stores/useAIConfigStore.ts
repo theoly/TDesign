@@ -85,7 +85,7 @@ interface AIConfigState {
   deleteProvider: (id: string) => void;
   
   setRoleBinding: (role: ModelRole, binding: ModelRoleBinding) => void;
-  getActiveProviderForRole: (role: ModelRole) => { provider?: AIProviderConfig; modelId: string } | null;
+  getActiveProviderForRole: (role: ModelRole) => { provider: AIProviderConfig; modelId: string } | null;
 }
 
 const STORAGE_KEY = 'ai_designer_providers_v1';
@@ -145,14 +145,26 @@ export const defaultBindings: Record<ModelRole, ModelRoleBinding> = {
   image: { role: 'image', providerId: 'prov-openai', modelId: 'dall-e-3' }
 };
 
+export function sanitizeModelId(model?: string): string {
+  if (!model) return '';
+  const trimmed = model.trim();
+  if (trimmed === 'gemini-2.5-flash' || trimmed === 'models/gemini-2.5-flash') {
+    return 'gemini-2.0-flash';
+  }
+  return trimmed;
+}
+
 function resolveDefaultModel(provider: AIProviderConfig): string {
-  if (provider.defaultModel) return provider.defaultModel;
-  const builtin = defaultProviders.find((d) => d.id === provider.id);
-  if (builtin?.defaultModel) return builtin.defaultModel;
-  if (provider.protocol === 'anthropic') return 'claude-3-5-sonnet-20241022';
-  if (provider.protocol === 'gemini') return 'gemini-2.0-flash';
-  if (provider.protocol === 'ollama_native') return 'qwen2.5-coder';
-  return 'deepseek-chat';
+  let model = provider.defaultModel;
+  if (!model) {
+    const builtin = defaultProviders.find((d) => d.id === provider.id);
+    if (builtin?.defaultModel) model = builtin.defaultModel;
+    else if (provider.protocol === 'anthropic') model = 'claude-3-5-sonnet-20241022';
+    else if (provider.protocol === 'gemini') model = 'gemini-2.0-flash';
+    else if (provider.protocol === 'ollama_native') model = 'qwen2.5-coder';
+    else model = 'deepseek-chat';
+  }
+  return sanitizeModelId(model);
 }
 
 function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<ModelRole, ModelRoleBinding> } {
@@ -163,11 +175,21 @@ function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<M
       const rawProviders: AIProviderConfig[] = parsed.providers || defaultProviders;
       const providers = rawProviders.map((p) => ({
         ...p,
-        defaultModel: resolveDefaultModel(p)
+        defaultModel: sanitizeModelId(resolveDefaultModel(p))
       }));
+      const rawBindings = parsed.bindings || defaultBindings;
+      const bindings = { ...defaultBindings, ...rawBindings };
+      (Object.keys(bindings) as ModelRole[]).forEach((role) => {
+        if (bindings[role]) {
+          bindings[role] = {
+            ...bindings[role],
+            modelId: sanitizeModelId(bindings[role].modelId) || defaultBindings[role].modelId
+          };
+        }
+      });
       return {
         providers,
-        bindings: parsed.bindings || defaultBindings
+        bindings
       };
     }
   } catch (e) {
@@ -251,6 +273,7 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
     const binding = bindings[role];
     if (!binding) return null;
     const provider = providers.find((p) => p.id === binding.providerId && p.isEnabled);
-    return { provider, modelId: binding.modelId };
+    if (!provider) return null;
+    return { provider, modelId: sanitizeModelId(binding.modelId) };
   }
 }));

@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Screen } from '../../types/project';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { NidEngine } from '../../utils/nidEngine';
 import { inspectText, setTextByNid } from '../../utils/textNode';
 import { useProjectStore } from '../../stores/useProjectStore';
-import { Copy, Edit2, Sparkles } from 'lucide-react';
+import { resolveOverlapAfterManualMove, calculateDragSnap } from '../../utils/canvasLayout';
+import { captureScreenSnippetAsDataUrl } from '../../utils/screenCapture';
+import { Copy, Edit2, Smartphone, Monitor, Image as ImageIcon, Check } from 'lucide-react';
 
 interface ScreenFrameProps {
   screen: Screen;
@@ -38,16 +40,21 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     updateScreenHtml,
     removeScreen,
     renameScreen,
-    duplicateScreen
+    duplicateScreen,
+    setCoverImage,
+    coverImage
   } = useProjectStore();
+
+  const [isCoverSetting, setIsCoverSetting] = useState(false);
+  const [coverSetSuccess, setCoverSetSuccess] = useState(false);
 
   const isActive = activeScreenId === screen.id;
   const frameWidth = settings.frameWidth;
   const showGuide = settings.showViewportGuide;
   const guideHeight = settings.viewportGuideHeight;
 
-  // Compile Tokens for this frame
   const tokensCss = compileTokensToCss(designSystem.tokens, settings.colorMode);
+  const isLight = settings.colorMode === 'light';
 
   /**
    * 画框壳与 L0 占位层的底色必须跟随当前明暗模式 (ISSUE-014)。
@@ -68,6 +75,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     .filter(([key]) => key.startsWith(`${screen.id}:`))
     .map(([key, ov]) => {
       const declarationsStr = Object.entries(ov.declarations)
+        .filter(([_, val]) => val !== '' && val !== undefined && val !== null)
         .map(([prop, val]) => `${prop}: ${val} !important;`)
         .join(' ');
       return `[data-nid="${ov.nid}"] { ${declarationsStr} }`;
@@ -102,10 +110,30 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     }
   }, [screen.htmlContent, screen.id, htmlWithNids, updateScreen]);
 
-  const fullSrcDoc = `<!DOCTYPE html>
+  /**
+   * 画框静态骨架文档 (D2 / D13)。
+   *
+   * 必须通过 useMemo 锁定在 [htmlWithNids, settings.deviceProfile]！
+   * 绝对不得将 screenOverrides 与 tokensCss 包含进依赖列表 (ISSUE-019)！
+   *
+   * 根因：L4 样式覆盖（包括布局 Flex/Block、主轴 Row/Col、对齐方式、Gap、Padding/Margin）
+   * 属于高频热更新操作。此前 fullSrcDoc 每次 render 都全量拼入 ${screenOverrides}，
+   * 导致任何样式微调都会让 React 重新赋值 iframe.srcdoc。
+   * 浏览器因此触发 iframe 网页全量重载，把 DOM 树完全抹除并重新构建，
+   * 导致元素上的 .aidesign-selected 高亮类名被瞬时清除；且由于 selectedNid 未变，
+   * 选区同步 effect 不会触发，用户看到的现象就是「点击布局按钮后蓝色选框丢失」。
+   *
+   * 修复方式：
+   * 1. fullSrcDoc 仅在 HTML 结构改变或设备切片改变时才重新构造；
+   * 2. tokensCss 与 screenOverrides 统一走内联 <style> 的 textContent 热更新（0ms，无 DOM 重建）；
+   * 3. handleLoad 与 overrides effect 双重守卫当前选区的 .aidesign-selected 高亮。
+   */
+  const fullSrcDoc = useMemo(() => {
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
   <style id="base-css">${getBaseCss(settings.deviceProfile)}</style>
   <style id="editor-chrome">${editorChromeCss}</style>
   <style id="tokens">${tokensCss}</style>
@@ -116,6 +144,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   ${htmlWithNids}
 </body>
 </html>`;
+  }, [htmlWithNids, settings.deviceProfile]);
 
   // Hot update Tokens when theme changes (under 100ms, no DOM rebuild)
   useEffect(() => {
@@ -135,9 +164,75 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     if (overridesEl) {
       overridesEl.textContent = screenOverrides;
     }
-  }, [screenOverrides]);
 
-  // Host Direct DOM Event Binding (Same-origin sandbox)
+    // 样式覆盖更新后，立即确保选中元素的 .aidesign-selected 高亮不丢失 (ISSUE-019)
+    if (isActive && selectedNid) {
+      const selectedEl = iframe.contentDocument.querySelector(`[data-nid="${selectedNid}"]`);
+      if (selectedEl && !selectedEl.classList.contains('aidesign-selected')) {
+        selectedEl.classList.add('aidesign-selected');
+      }
+    }
+
+    if (selectedNid && screen.id === activeScreenId) {
+      const target = iframe.contentDocument.querySelector(`[data-nid="${selectedNid}"]`) as HTMLElement | null;
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        const win = target.ownerDocument?.defaultView || iframe.contentWindow || window;
+        let style: CSSStyleDeclaration | null = null;
+        try {
+          style = win ? win.getComputedStyle(target) : null;
+        } catch {
+          style = null;
+        }
+        const cur = useProjectStore.getState().selectedNode;
+        if (cur && cur.nid === selectedNid) {
+          useProjectStore.getState().selectNode({
+            ...cur,
+            screenId: cur.screenId || screen.id,
+            computedBox: {
+              width: Math.round(rect.width) || 0,
+              height: Math.round(rect.height) || 0,
+              top: Math.round(rect.top) || 0,
+              left: Math.round(rect.left) || 0,
+              padding: {
+                top: (style && parseInt(style.paddingTop, 10)) || 0,
+                right: (style && parseInt(style.paddingRight, 10)) || 0,
+                bottom: (style && parseInt(style.paddingBottom, 10)) || 0,
+                left: (style && parseInt(style.paddingLeft, 10)) || 0
+              },
+              margin: {
+                top: (style && parseInt(style.marginTop, 10)) || 0,
+                right: (style && parseInt(style.marginRight, 10)) || 0,
+                bottom: (style && parseInt(style.marginBottom, 10)) || 0,
+                left: (style && parseInt(style.marginLeft, 10)) || 0
+              }
+            },
+            computedLayout: {
+              display: style?.display || 'block',
+              flexDirection: style?.flexDirection || 'row',
+              alignItems: style?.alignItems || 'stretch',
+              justifyContent: style?.justifyContent || 'flex-start',
+              flexWrap: style?.flexWrap || 'nowrap',
+              gap: style?.gap || '0px',
+              rowGap: style?.rowGap,
+              columnGap: style?.columnGap
+            }
+          });
+        }
+      }
+    }
+  }, [screenOverrides, selectedNid, activeScreenId]);
+
+  /**
+   * 宿主直接绑定同源 iframe 的 DOM 事件。
+   *
+   * 画框**不得**带 `sandbox` 属性 (ISSUE-017)：WebKit (Tauri macOS WKWebView)
+   * 对「脚本被禁用」的文档不执行任何事件监听器——连宿主 realm 注册的都不执行，
+   * 画框因此完全丧失点选、悬浮与行内编辑能力。Chromium 无此行为，所以
+   * happy-dom 单测与浏览器 dev 环境都抓不到，只有桌面端复现。
+   * 脚本隔离改由 srcDoc 头部的 CSP `script-src 'none'` 承担——实测在
+   * WebKit 与 Chromium 下均能拦下 `<script>` 与内联 `on*` 处理器。
+   */
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -150,6 +245,23 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
       if (cleanupListeners) {
         cleanupListeners();
+      }
+
+      // 同步初始/重载后的动态样式与选中高亮 (ISSUE-019)
+      const tokensEl = doc.getElementById('tokens');
+      if (tokensEl) tokensEl.textContent = tokensCss;
+      const overridesEl = doc.getElementById('overrides');
+      if (overridesEl) overridesEl.textContent = screenOverrides;
+
+      doc.querySelectorAll('.aidesign-selected').forEach(el => el.classList.remove('aidesign-selected'));
+      doc.querySelectorAll('.aidesign-hovered').forEach(el => el.classList.remove('aidesign-hovered'));
+      if (isActive && selectedNid) {
+        const selectedEl = doc.querySelector(`[data-nid="${selectedNid}"]`);
+        if (selectedEl) selectedEl.classList.add('aidesign-selected');
+      }
+      if (isActive && hoveredNid && hoveredNid !== selectedNid) {
+        const hoveredEl = doc.querySelector(`[data-nid="${hoveredNid}"]`);
+        if (hoveredEl) hoveredEl.classList.add('aidesign-hovered');
       }
 
       // Measure content height (D13)
@@ -192,17 +304,25 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           while (cur && cur !== doc.body) {
             const pNid = cur.getAttribute('data-nid');
             if (pNid) {
+              const clsAttr = cur.getAttribute('class');
+              const cls = clsAttr || (typeof cur.className === 'string' ? cur.className : (cur.className && typeof cur.className === 'object' && 'baseVal' in cur.className ? String((cur.className as any).baseVal) : ''));
               parentChain.unshift({
                 nid: pNid,
                 tagName: cur.tagName.toLowerCase(),
-                className: cur.className
+                className: cls
               });
             }
             cur = cur.parentElement;
           }
 
           const rect = target.getBoundingClientRect();
-          const style = window.getComputedStyle(target);
+          const win = target.ownerDocument?.defaultView || iframe.contentWindow || window;
+          let style: CSSStyleDeclaration | null = null;
+          try {
+            style = win ? win.getComputedStyle(target) : null;
+          } catch {
+            style = null;
+          }
 
           selectNode({
             screenId: screen.id,
@@ -217,22 +337,32 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             componentId,
             componentInstanceId,
             computedBox: {
-              width: Math.round(rect.width),
-              height: Math.round(rect.height),
-              top: Math.round(rect.top),
-              left: Math.round(rect.left),
+              width: Math.round(rect.width) || 0,
+              height: Math.round(rect.height) || 0,
+              top: Math.round(rect.top) || 0,
+              left: Math.round(rect.left) || 0,
               padding: {
-                top: parseInt(style.paddingTop, 10) || 0,
-                right: parseInt(style.paddingRight, 10) || 0,
-                bottom: parseInt(style.paddingBottom, 10) || 0,
-                left: parseInt(style.paddingLeft, 10) || 0
+                top: (style && parseInt(style.paddingTop, 10)) || 0,
+                right: (style && parseInt(style.paddingRight, 10)) || 0,
+                bottom: (style && parseInt(style.paddingBottom, 10)) || 0,
+                left: (style && parseInt(style.paddingLeft, 10)) || 0
               },
               margin: {
-                top: parseInt(style.marginTop, 10) || 0,
-                right: parseInt(style.marginRight, 10) || 0,
-                bottom: parseInt(style.marginBottom, 10) || 0,
-                left: parseInt(style.marginLeft, 10) || 0
+                top: (style && parseInt(style.marginTop, 10)) || 0,
+                right: (style && parseInt(style.marginRight, 10)) || 0,
+                bottom: (style && parseInt(style.marginBottom, 10)) || 0,
+                left: (style && parseInt(style.marginLeft, 10)) || 0
               }
+            },
+            computedLayout: {
+              display: style?.display || 'block',
+              flexDirection: style?.flexDirection || 'row',
+              alignItems: style?.alignItems || 'stretch',
+              justifyContent: style?.justifyContent || 'flex-start',
+              flexWrap: style?.flexWrap || 'nowrap',
+              gap: style?.gap || '0px',
+              rowGap: style?.rowGap,
+              columnGap: style?.columnGap
             }
           });
         }
@@ -273,10 +403,24 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
         }
       };
 
+      const onKeyDown = (ke: KeyboardEvent) => {
+        if ((ke.key === 'Delete' || ke.key === 'Backspace') && !ke.metaKey && !ke.ctrlKey) {
+          const target = ke.target as HTMLElement | null;
+          const isEditing = target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+          const currentSel = useProjectStore.getState().selectedNid;
+          const currentActive = useProjectStore.getState().activeScreenId;
+          if (!isEditing && currentSel && screen.id === currentActive) {
+            ke.preventDefault();
+            useProjectStore.getState().deleteNode(screen.id, currentSel);
+          }
+        }
+      };
+
       doc.body.addEventListener('mouseover', onMouseOver);
       doc.body.addEventListener('mouseout', onMouseOut);
       doc.body.addEventListener('click', onClick);
       doc.body.addEventListener('dblclick', onDblClick);
+      doc.body.addEventListener('keydown', onKeyDown);
 
       cleanupListeners = () => {
         if (doc && doc.body) {
@@ -284,6 +428,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           doc.body.removeEventListener('mouseout', onMouseOut);
           doc.body.removeEventListener('click', onClick);
           doc.body.removeEventListener('dblclick', onDblClick);
+          doc.body.removeEventListener('keydown', onKeyDown);
         }
       };
     };
@@ -324,7 +469,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       const hoveredEl = doc.querySelector(`[data-nid="${hoveredNid}"]`);
       if (hoveredEl) hoveredEl.classList.add('aidesign-hovered');
     }
-  }, [selectedNid, hoveredNid, isActive, lodLevel]);
+  }, [selectedNid, hoveredNid, isActive, lodLevel, screenOverrides]);
 
   // 按住画框顶栏拖动位置 (PRD §3.3.2)。世界坐标位移 = 屏幕位移 / 画板缩放比
   const handleTitleMouseDown = (e: React.MouseEvent) => {
@@ -350,51 +495,126 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       const dy = (ev.clientY - d.startY) / scale;
       if (!moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return; // 容忍点击时的微小抖动
       moved = true;
+
+      const rawX = Math.round(d.originX + dx);
+      const rawY = Math.round(d.originY + dy);
+      const store = useProjectStore.getState();
+
+      const snapResult = calculateDragSnap(
+        screen.id,
+        { x: rawX, y: rawY },
+        store.screens,
+        store.settings.frameWidth
+      );
+
+      store.setSnapGuides(snapResult.guides);
+
       updateScreen(screen.id, {
-        position: { x: Math.round(d.originX + dx), y: Math.round(d.originY + dy) }
+        position: snapResult.snappedPosition
       });
     };
 
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      const d = dragRef.current;
       dragRef.current = null;
       setIsDragging(false);
+
+      useProjectStore.getState().clearSnapGuides();
+
+      if (moved && d) {
+        const store = useProjectStore.getState();
+        const curScreen = store.screens[screen.id];
+        if (curScreen && curScreen.position) {
+          const layoutResult = resolveOverlapAfterManualMove({
+            movedScreenId: screen.id,
+            newPosition: curScreen.position,
+            screens: store.screens,
+            screenOrder: store.screenOrder,
+            frameWidth: store.settings.frameWidth,
+            viewportGuideHeight: store.settings.viewportGuideHeight
+          });
+
+          const positions: Record<string, { x: number; y: number }> = {};
+          const originalPositions: Record<string, { x: number; y: number }> = {
+            [screen.id]: { x: d.originX, y: d.originY }
+          };
+
+          // 被拖动画框最终坐标（可能经过左侧防重叠校正）
+          positions[screen.id] = layoutResult.position;
+
+          // 右侧受影响被推开的画框
+          for (const s of layoutResult.shiftedScreens) {
+            const orig = store.screens[s.id]?.position;
+            if (orig) {
+              positions[s.id] = { x: s.newX, y: orig.y };
+              originalPositions[s.id] = orig;
+            }
+          }
+
+          const hasShifted = layoutResult.shiftedScreens.length > 0;
+          const label = hasShifted ? '移动画框并自动避让' : '移动画框';
+
+          store.updateScreenPositions(positions, label, originalPositions);
+        }
+      }
     };
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
 
+  // 截取当前画框上部分作为工程封面 (T-PCI-03)
+  const handleSetAsCover = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isCoverSetting) return;
+    setIsCoverSetting(true);
+    try {
+      const dataUrl = await captureScreenSnippetAsDataUrl(screen, {
+        frameWidth: settings.frameWidth,
+        deviceProfile: settings.deviceProfile,
+        tokensCss,
+        baseCss: getBaseCss(settings.deviceProfile),
+        screenOverrides,
+        colorMode: settings.colorMode,
+        targetWidth: 480,
+        targetHeight: 240
+      });
+      setCoverImage(dataUrl);
+      setCoverSetSuccess(true);
+      setTimeout(() => setCoverSetSuccess(false), 1800);
+    } catch (err) {
+      console.error('[cover] 设置工程封面失败', err);
+    } finally {
+      setIsCoverSetting(false);
+    }
+  };
+
   return (
     <div
       ref={containerRef}
-      className={`absolute transition-shadow duration-200 select-none ${
-        isStaged
-          ? 'ring-4 ring-purple-500 shadow-2xl rounded-xl'
-          : isActive
-          ? 'ring-2 ring-blue-500 shadow-xl rounded-lg'
-          : 'ring-1 ring-slate-700 hover:ring-slate-500 shadow-md rounded-lg'
-      }`}
+      className="absolute select-none group"
       style={{
         left: `${screen.position.x}px`,
         top: `${screen.position.y}px`,
-        width: `${frameWidth}px`,
-        height: `${measuredHeight + 36}px`,
-        background: frameBg
+        width: `${frameWidth}px`
       }}
       onClick={() => setActiveScreen(screen.id)}
     >
-      {/* 画框顶栏：唯一的拖动热区 (PRD §3.3.2) */}
+      {/* 浮动在画框上方的纯净标题栏 (参考 Trae 风格，取消黑条无多余图标，仅激活时展示动作按钮) */}
       <div
         onMouseDown={handleTitleMouseDown}
-        className={`h-9 px-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs text-slate-300 rounded-t-lg ${
+        className={`min-h-[26px] mb-2 px-0.5 flex items-center justify-between text-xs select-none transition-colors ${
           isDragging ? 'cursor-grabbing' : 'cursor-grab'
+        } ${
+          isActive
+            ? 'text-blue-400 font-semibold'
+            : 'text-slate-300 hover:text-white font-medium'
         }`}
         title="按住拖动可调整画框位置"
       >
-        <div className="flex items-center gap-2 font-medium">
-          <span className={`w-2 h-2 rounded-full ${isStaged ? 'bg-purple-400 animate-pulse' : isActive ? 'bg-blue-500' : 'bg-slate-600'}`} />
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2 flex-wrap">
           {isEditingName ? (
             <input
               type="text"
@@ -417,7 +637,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                   setNameInput(screen.name);
                 }
               }}
-              className="bg-slate-950 border border-blue-500 rounded px-1.5 py-0.5 text-xs text-white outline-none w-36"
+              className="border border-blue-500 rounded px-1.5 py-0.5 text-xs outline-none min-w-0 flex-1 max-w-[280px] bg-slate-900 text-white shadow-sm"
               autoFocus
               onClick={(e) => e.stopPropagation()}
             />
@@ -427,86 +647,111 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                 e.stopPropagation();
                 setIsEditingName(true);
               }}
-              className="cursor-pointer hover:text-white"
-              title="双击重命名画框"
+              className="cursor-pointer break-words max-w-full leading-snug tracking-wide"
+              title={`${screen.name} (双击重命名)`}
             >
               {screen.name}
             </span>
           )}
-          <span className="text-slate-500 font-mono">({frameWidth}px)</span>
-          {isStaged && <span className="bg-purple-900/60 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded text-[10px]">AI 新方案比选</span>}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-400 font-mono mr-1">LOD {lodLevel}</span>
-          {!isStaged && (
-            <>
-              {/* T-AE-26: 样张页是设计系统的投影，改它应该去改 Token，不接受 AI 改写 */}
-              {screen.metadata?.kind !== 'specimen' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPolish?.(screen.id);
-                  }}
-                  className="text-slate-400 hover:text-amber-400 p-1 rounded hover:bg-slate-800 transition"
-                  title="AI 质感润色：保持结构与文案不变，只提升视觉表现"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  duplicateScreen(screen.id);
-                }}
-                className="text-slate-400 hover:text-blue-400 p-1 rounded hover:bg-slate-800 transition"
-                title="复制画框 (PRD §3.3.2)"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditingName(true);
-                }}
-                className="text-slate-400 hover:text-blue-400 p-1 rounded hover:bg-slate-800 transition"
-                title="重命名画框"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm(`确定删除画框 "${screen.name}" 吗？`)) {
-                    removeScreen(screen.id);
-                  }
-                }}
-                className="text-slate-400 hover:text-red-400 p-1 rounded hover:bg-slate-800 transition text-sm leading-none"
-                title="删除画框"
-              >
-                ×
-              </button>
-            </>
+          {isStaged && (
+            <span className="bg-purple-900/60 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded text-[10px] flex-shrink-0">
+              AI 新方案比选
+            </span>
           )}
         </div>
+
+        {/* 仅在激活的页面展示动作按钮 (Trae 规范) */}
+        {!isStaged && isActive && (
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <button
+              onClick={handleSetAsCover}
+              disabled={isCoverSetting}
+              className={`p-1 rounded transition flex items-center gap-1 ${
+                coverSetSuccess
+                  ? 'text-emerald-400 bg-emerald-950/60'
+                  : 'text-slate-400 hover:text-blue-400 hover:bg-slate-800'
+              }`}
+              title={coverSetSuccess ? '已设为工程封面！' : '设为工程封面'}
+              data-testid="set-as-cover-btn"
+            >
+              {coverSetSuccess ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <ImageIcon className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                duplicateScreen(screen.id);
+              }}
+              className="p-1 rounded transition text-slate-400 hover:text-blue-400 hover:bg-slate-800"
+              title="复制画框"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditingName(true);
+              }}
+              className="p-1 rounded transition text-slate-400 hover:text-blue-400 hover:bg-slate-800"
+              title="重命名画框"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(`确定删除画框 "${screen.name}" 吗？此操作不可恢复。`)) {
+                  removeScreen(screen.id);
+                }
+              }}
+              className="p-1 rounded transition text-sm leading-none text-slate-400 hover:text-red-400 hover:bg-slate-800"
+              title="删除画框"
+            >
+              ×
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Artboard Content */}
-      <div className="relative w-full overflow-hidden" style={{ height: `${measuredHeight}px` }}>
-        {lodLevel === 0 ? (
-          // L0 Bitmap Proxy
+      {/* 原型画框卡片主体 (圆角无内嵌顶栏) */}
+      <div
+        className={`relative w-full overflow-hidden transition-shadow duration-200 ${
+          isStaged
+            ? 'ring-4 ring-purple-500 shadow-2xl rounded-2xl'
+            : isActive
+            ? 'ring-2 ring-blue-500 shadow-2xl rounded-2xl'
+            : 'ring-1 ring-slate-800 hover:ring-slate-700 shadow-xl rounded-2xl'
+        }`}
+        style={{
+          width: `${frameWidth}px`,
+          height: `${measuredHeight}px`,
+          background: frameBg
+        }}
+      >
+        {lodLevel === 0 && screen.thumbnail ? (
+          // L0 Bitmap Proxy (有缩略图时渲染)
+          <img
+            src={screen.thumbnail}
+            alt={screen.name}
+            className="w-full h-full object-cover block select-none pointer-events-none"
+          />
+        ) : lodLevel === 0 ? (
+          // L0 降级占位（无缩略图且强制指定 L0 时）
           <div
-            className="w-full h-full flex flex-col items-center justify-center text-sm font-mono"
+            className="w-full h-full flex flex-col items-center justify-center text-sm font-mono select-none"
             style={{ background: frameBg, color: frameFg }}
           >
             <span>[L0 位图降级缩略视图]</span>
             <span className="text-xs opacity-70">{screen.name}</span>
           </div>
         ) : (
-          // L1 (Frozen) or L2 (Active) Iframe
+          // L1 (Frozen) or L2 (Active) Iframe: 保持完整高保真视觉渲染
           <iframe
             ref={iframeRef}
             srcDoc={fullSrcDoc}
-            sandbox="allow-same-origin"
             className="w-full h-full border-none block"
             style={{
               pointerEvents: lodLevel === 2 ? 'auto' : 'none'
@@ -515,14 +760,14 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           />
         )}
 
-        {/* Device Viewport Guide (D13: 首屏虚线参考) */}
+        {/* Device Viewport Guide (D13: 首屏虚线参考 - 减淡视觉效果) */}
         {showGuide && guideHeight < measuredHeight && (
           <div
-            className="absolute left-0 right-0 border-b-2 border-dashed border-rose-500/70 pointer-events-none z-30 flex items-center justify-end px-3"
+            className="absolute left-0 right-0 border-b border-dashed border-slate-400/30 pointer-events-none z-30 flex items-center justify-end px-3"
             style={{ top: `${guideHeight}px` }}
           >
-            <span className="bg-rose-600/90 text-white text-[10px] font-semibold px-2 py-0.5 rounded shadow">
-              {settings.deviceProfile.toUpperCase()} 首屏折线 ({guideHeight}px)
+            <span className="text-[10px] text-slate-400/80 bg-slate-900/70 border border-slate-700/50 px-1.5 py-0.5 rounded shadow-sm">
+              首屏参考线 ({guideHeight}px)
             </span>
           </div>
         )}

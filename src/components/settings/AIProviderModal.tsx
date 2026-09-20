@@ -3,26 +3,35 @@ import { useAIConfigStore, THIRD_PARTY_PRESETS } from '../../stores/useAIConfigS
 import { useUsageStore } from '../../stores/useUsageStore';
 import { AIProviderConfig, ProviderProtocol, ThirdPartyPreset } from '../../types/provider';
 import { AIService } from '../../services/ai/aiService';
+import { ModelDiscoveryService } from '../../services/ai/modelDiscoveryService';
+import { supportsVision, detectModelCapabilities, DiscoveredModel } from '../../services/ai/engine/core/multimodalGuard';
 import {
   BarChart3,
+  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
+  Code2,
   Eye,
   EyeOff,
+  MessageSquare,
   Plus,
+  RefreshCw,
   Server,
   ShieldAlert,
   Sparkles,
   Trash2,
   XCircle
 } from 'lucide-react';
+import { QuickPromptsConfigPanel } from './QuickPromptsConfigPanel';
 
 interface AIProviderModalProps {
   onClose: () => void;
+  initialTab?: 'provider' | 'quick_prompts';
 }
 
-export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => {
+export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initialTab = 'provider' }) => {
+  const [activeTab, setActiveTab] = useState<'provider' | 'quick_prompts'>(initialTab);
   const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding } =
     useAIConfigStore();
   const { totalCalls, totalInputTokens, totalOutputTokens, totalEstimatedCostUsd, clearUsage } =
@@ -34,6 +43,8 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
   const [testStatus, setTestStatus] = useState<{ testing: boolean; success?: boolean; message?: string }>({
     testing: false
   });
+  const [discoveredModelsMap, setDiscoveredModelsMap] = useState<Record<string, DiscoveredModel[]>>({});
+  const [isDiscovering, setIsDiscovering] = useState(false);
 
   const curProvider = providers.find((p) => p.id === selectedProviderId) || providers[0];
 
@@ -42,6 +53,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
     if (prov.defaultModel) return prov.defaultModel;
     if (bindings.code.providerId === prov.id) return bindings.code.modelId;
     if (bindings.chat.providerId === prov.id) return bindings.chat.modelId;
+    if (bindings.vision.providerId === prov.id) return bindings.vision.modelId;
     switch (prov.protocol) {
       case 'anthropic':
         return 'claude-3-5-sonnet-20241022';
@@ -56,32 +68,46 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
   };
 
   const curModelId = getProviderModelId(curProvider);
-  const isCurActive = bindings.code.providerId === curProvider?.id;
+  const isCurCode = bindings.code.providerId === curProvider?.id && bindings.code.modelId === curModelId;
+  const isCurChat = bindings.chat.providerId === curProvider?.id && bindings.chat.modelId === curModelId;
+  const isCurVision = bindings.vision.providerId === curProvider?.id && bindings.vision.modelId === curModelId;
 
   const handleModelChange = (newModelId: string) => {
     if (!curProvider) return;
     updateProvider(curProvider.id, { defaultModel: newModelId });
-    if (bindings.code.providerId === curProvider.id) {
-      setRoleBinding('code', { ...bindings.code, modelId: newModelId });
-    }
-    if (bindings.chat.providerId === curProvider.id) {
-      setRoleBinding('chat', { ...bindings.chat, modelId: newModelId });
-    }
   };
 
-  const handleSetAsActive = () => {
-    if (!curProvider) return;
-    const modelId = curModelId.trim();
+  const handleSetAsCode = (modelIdToSet = curModelId.trim()) => {
+    if (!curProvider || !modelIdToSet) return;
     setRoleBinding('code', {
       role: 'code',
       providerId: curProvider.id,
-      modelId
+      modelId: modelIdToSet
     });
+  };
+
+  const handleSetAsChat = (modelIdToSet = curModelId.trim()) => {
+    if (!curProvider || !modelIdToSet) return;
     setRoleBinding('chat', {
       role: 'chat',
       providerId: curProvider.id,
-      modelId
+      modelId: modelIdToSet
     });
+  };
+
+  const handleSetAsVision = (modelIdToSet = curModelId.trim()) => {
+    if (!curProvider || !modelIdToSet) return;
+    setRoleBinding('vision', {
+      role: 'vision',
+      providerId: curProvider.id,
+      modelId: modelIdToSet
+    });
+  };
+
+  const handleSetAsBoth = (modelIdToSet = curModelId.trim()) => {
+    if (!curProvider || !modelIdToSet) return;
+    handleSetAsCode(modelIdToSet);
+    handleSetAsChat(modelIdToSet);
   };
 
   const handleTestConnection = async () => {
@@ -96,9 +122,56 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
       return;
     }
 
-    setTestStatus({ testing: true });
+    setTestStatus({ testing: true, message: '正在测试连接...' });
     const res = await AIService.testConnection(curProvider, modelToTest);
     setTestStatus({ testing: false, success: res.success, message: res.message });
+
+    if (res.success) {
+      // 连通成功后自动联动探测模型列表与能力标签
+      fetchModels(curProvider).catch(() => {});
+    }
+  };
+
+  const fetchModels = async (prov: AIProviderConfig, isManual = false) => {
+    setIsDiscovering(true);
+    if (isManual) {
+      setTestStatus({ testing: true, message: '正在向 Provider 接口探测可用模型...' });
+    }
+    try {
+      const res = await ModelDiscoveryService.discoverModels(prov);
+      const visionCount = res.models.filter((m) => m.capabilities.includes('vision')).length;
+      if (res.models.length > 0) {
+        setDiscoveredModelsMap((prev) => ({
+          ...prev,
+          [prov.id]: res.models
+        }));
+        updateProvider(prov.id, {
+          customModels: res.models.map((m) => m.id)
+        });
+        setTestStatus((prev) => ({
+          testing: false,
+          success: true,
+          message: `${prev.message || '连通性测试成功'} (已探测到 ${res.models.length} 个可用模型，含 ${visionCount} 个 Vision 视觉模型)`
+        }));
+      } else if (isManual) {
+        setTestStatus({ testing: false, success: res.success, message: res.message });
+      }
+    } catch (e: any) {
+      if (isManual) {
+        setTestStatus({ testing: false, success: false, message: e.message || '模型探测失败' });
+      }
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
+  const handleDiscoverModels = async () => {
+    if (!curProvider) return;
+    if (!curProvider.apiKey && curProvider.protocol !== 'ollama_native') {
+      setTestStatus({ testing: false, success: false, message: '请先填写 API Key 凭证后再探测模型' });
+      return;
+    }
+    await fetchModels(curProvider, true);
   };
 
   const handleAddPreset = (preset: ThirdPartyPreset) => {
@@ -142,7 +215,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
       return ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-7-sonnet-20250219'];
     }
     if (curProvider.protocol === 'gemini') {
-      return ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash'];
+      return ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
     }
     if (curProvider.protocol === 'ollama_native') {
       return ['qwen2.5-coder', 'llama3.3', 'deepseek-r1:8b'];
@@ -164,25 +237,70 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
 
   const activeCodeProv = providers.find((p) => p.id === bindings.code.providerId);
   const activeChatProv = providers.find((p) => p.id === bindings.chat.providerId);
+  const activeVisionProv = providers.find((p) => p.id === bindings.vision.providerId);
+
+  const currentDiscovered = discoveredModelsMap[curProvider?.id || ''];
+  const displayModels: DiscoveredModel[] =
+    currentDiscovered && currentDiscovered.length > 0
+      ? currentDiscovered
+      : curProvider?.customModels && curProvider.customModels.length > 0
+      ? curProvider.customModels.map((id) => ({
+          id,
+          name: id,
+          capabilities: detectModelCapabilities(curProvider, id)
+        }))
+      : getSuggestedModels().map((id) => ({
+          id,
+          name: id,
+          capabilities: detectModelCapabilities(curProvider, id)
+        }));
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Server className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold text-slate-100 text-sm">
-              AI Provider 配置与模型档位绑定 (Settings)
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="font-semibold text-slate-100 text-sm hidden sm:inline">
+              AI Provider 配置与模型档位绑定
             </span>
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActiveTab('provider')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  activeTab === 'provider'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Server className="w-3.5 h-3.5" />
+                <span>AI 模型与 Provider</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('quick_prompts')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  activeTab === 'quick_prompts'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>对话快捷输入 (Quick Prompts)</span>
+              </button>
+            </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1">
             ×
           </button>
         </div>
 
-        {/* Content Layout */}
-        <div className="flex-1 flex overflow-hidden text-xs">
+        {activeTab === 'quick_prompts' ? (
+          <QuickPromptsConfigPanel />
+        ) : (
+          /* Content Layout */
+          <div className="flex-1 flex overflow-hidden text-xs">
           {/* Provider Sidebar List */}
           <div className="w-64 border-r border-slate-800 bg-slate-950 p-3 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-1 mb-2">
@@ -228,7 +346,9 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
             {/* Provider Buttons Scroll Area */}
             <div className="flex-1 overflow-y-auto space-y-1 pr-1">
               {providers.map((prov) => {
-                const isActive = bindings.code.providerId === prov.id;
+                const isCode = bindings.code.providerId === prov.id;
+                const isChat = bindings.chat.providerId === prov.id;
+                const isVision = bindings.vision.providerId === prov.id;
                 const isSelected = curProvider?.id === prov.id;
 
                 return (
@@ -257,13 +377,47 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {isActive && (
+                      {isCode && isChat ? (
                         <span
                           className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
                             isSelected ? 'bg-blue-700 text-white' : 'bg-blue-500/20 text-blue-300'
                           }`}
+                          title="同时作为代码生成与对话推理主力"
                         >
                           主力
+                        </span>
+                      ) : (
+                        <>
+                          {isCode && (
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                isSelected ? 'bg-blue-700 text-white' : 'bg-blue-500/20 text-blue-300'
+                              }`}
+                              title="页面代码生成档"
+                            >
+                              代码
+                            </span>
+                          )}
+                          {isChat && (
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                isSelected ? 'bg-emerald-700 text-white' : 'bg-emerald-500/20 text-emerald-300'
+                              }`}
+                              title="对话与意图推理档"
+                            >
+                              对话
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {isVision && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                            isSelected ? 'bg-purple-700 text-white' : 'bg-purple-500/20 text-purple-300'
+                          }`}
+                          title="视觉反推与参考图识别档"
+                        >
+                          Vision
                         </span>
                       )}
                       {prov.apiKey && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
@@ -273,33 +427,107 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
               })}
             </div>
 
-            {/* Model Role Bindings Summary */}
+            {/* Model Role Bindings Summary & Quick Assignment */}
             <div className="pt-3 mt-3 border-t border-slate-800 space-y-1.5 flex-shrink-0">
               <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1 block">
                 核心能力档位指派
               </span>
-              <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl space-y-1.5">
-                <div>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span>页面代码生成档</span>
+              <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+                {/* Code generation slot */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <Code2 className="w-3 h-3 text-blue-400" />
+                      <span>页面代码生成档</span>
+                    </span>
+                    {isCurCode ? (
+                      <span className="text-[9px] text-blue-400 font-medium bg-blue-500/10 px-1 py-0.2 rounded">当前已选</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsCode()}
+                        className="text-[9px] text-blue-400 hover:text-blue-300 underline font-medium"
+                        title="将当前 Provider 和模型指派为代码生成档"
+                      >
+                        指派当前
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-blue-400 truncate block font-mono text-xs max-w-[130px]">
+                      {bindings.code.modelId}
+                    </span>
                     <span className="text-slate-500 font-mono text-[9px] truncate max-w-[80px]">
                       {activeCodeProv?.name || '未指定'}
                     </span>
                   </div>
-                  <span className="font-semibold text-blue-400 truncate block font-mono">
-                    {bindings.code.modelId}
-                  </span>
                 </div>
-                <div className="border-t border-slate-800/60 pt-1">
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span>对话与意图推理档</span>
+
+                {/* Chat & reasoning slot */}
+                <div className="border-t border-slate-800/60 pt-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3 text-emerald-400" />
+                      <span>对话与意图推理档</span>
+                    </span>
+                    {isCurChat ? (
+                      <span className="text-[9px] text-emerald-400 font-medium bg-emerald-500/10 px-1 py-0.2 rounded">当前已选</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsChat()}
+                        className="text-[9px] text-emerald-400 hover:text-emerald-300 underline font-medium"
+                        title="将当前 Provider 和模型指派为对话推理档"
+                      >
+                        指派当前
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-emerald-300 truncate block font-mono text-xs max-w-[130px]">
+                      {bindings.chat.modelId}
+                    </span>
                     <span className="text-slate-500 font-mono text-[9px] truncate max-w-[80px]">
                       {activeChatProv?.name || '未指定'}
                     </span>
                   </div>
-                  <span className="font-semibold text-slate-300 truncate block font-mono">
-                    {bindings.chat.modelId}
-                  </span>
+                </div>
+
+                {/* Vision slot */}
+                <div className="border-t border-slate-800/60 pt-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <Eye className="w-3 h-3 text-purple-400" />
+                      <span>视觉与截图反推档</span>
+                    </span>
+                    {isCurVision ? (
+                      <span className="text-[9px] text-purple-400 font-medium bg-purple-500/10 px-1 py-0.2 rounded">当前已选</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsVision()}
+                        className="text-[9px] text-purple-400 hover:text-purple-300 underline font-medium"
+                        title="将当前 Provider 和模型指派为视觉反推档"
+                      >
+                        指派当前
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-purple-400 truncate block font-mono text-xs max-w-[130px]">
+                      {bindings.vision.modelId}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-slate-500 font-mono text-[9px] truncate max-w-[60px]">
+                        {activeVisionProv?.name || '未指定'}
+                      </span>
+                      {activeVisionProv?.apiKey || activeVisionProv?.protocol === 'ollama_native' ? (
+                        <span className="text-[8px] text-emerald-400 font-sans">就绪</span>
+                      ) : (
+                        <span className="text-[8px] text-amber-400 font-sans">未配Key</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -369,26 +597,87 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {isCurActive ? (
-                      <span className="px-3 py-1.5 rounded-xl bg-blue-500/20 text-blue-300 text-xs font-medium border border-blue-500/30 flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>当前主力生成模型</span>
+                  <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+                    {/* Code Model Assignment */}
+                    {isCurCode ? (
+                      <span
+                        className="px-2.5 py-1.5 rounded-xl bg-blue-500/20 text-blue-300 text-xs font-medium border border-blue-500/30 flex items-center gap-1 shadow-sm"
+                        title="当前模型已作为页面代码生成档"
+                      >
+                        <Check className="w-3.5 h-3.5 text-blue-400" />
+                        <span>代码生成档</span>
                       </span>
                     ) : (
                       <button
-                        onClick={handleSetAsActive}
-                        className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1.5"
+                        type="button"
+                        onClick={() => handleSetAsCode()}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-blue-900/40 text-blue-300 hover:text-blue-200 text-xs font-medium border border-slate-700 hover:border-blue-500/40 transition flex items-center gap-1"
+                        title="将当前 Provider 与模型指派为页面代码生成档"
+                      >
+                        <Code2 className="w-3.5 h-3.5 text-blue-400" />
+                        <span>设为代码模型</span>
+                      </button>
+                    )}
+
+                    {/* Chat Model Assignment */}
+                    {isCurChat ? (
+                      <span
+                        className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium border border-emerald-500/30 flex items-center gap-1 shadow-sm"
+                        title="当前模型已作为对话与意图推理档"
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>对话推理档</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsChat()}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 hover:text-emerald-200 text-xs font-medium border border-slate-700 hover:border-emerald-500/40 transition flex items-center gap-1"
+                        title="将当前 Provider 与模型指派为对话与意图推理档"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>设为对话模型</span>
+                      </button>
+                    )}
+
+                    {/* Vision Model Assignment */}
+                    {isCurVision ? (
+                      <span
+                        className="px-2.5 py-1.5 rounded-xl bg-purple-500/20 text-purple-300 text-xs font-medium border border-purple-500/30 flex items-center gap-1 shadow-sm"
+                        title="当前模型已作为参考图视觉反推档"
+                      >
+                        <Check className="w-3.5 h-3.5 text-purple-400" />
+                        <span>Vision 识图档</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsVision()}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-purple-900/40 text-purple-300 hover:text-purple-200 text-xs font-medium border border-slate-700 hover:border-purple-500/40 transition flex items-center gap-1"
+                        title="将当前 Provider 与模型指派为参考图视觉反推档"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-purple-400" />
+                        <span>设为 Vision 档</span>
+                      </button>
+                    )}
+
+                    {/* Quick Dual Assignment (Code & Chat) */}
+                    {(!isCurCode || !isCurChat) && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsBoth()}
+                        className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1"
+                        title="同时指派为代码生成与对话推理双主力"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
-                        <span>设为主力模型 (Code & Chat)</span>
+                        <span>双选主力</span>
                       </button>
                     )}
 
                     {curProvider.isCustom && (
                       <button
                         onClick={() => handleDeleteProvider(curProvider.id)}
-                        className="p-1.5 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/30 transition"
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/30 transition ml-1"
                         title="删除该自定义 Provider"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -496,9 +785,35 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-slate-300 font-semibold block">当前分配的模型 ID (Model ID)</label>
-                    <span className="text-[10px] text-slate-500">
-                      支持任意第三方模型名，将作为测试与调用的 model 参数
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsCode()}
+                        className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 transition"
+                        title="将此输入框模型指派为页面代码生成档"
+                      >
+                        <Code2 className="w-3 h-3" />
+                        <span>指派给代码</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsChat()}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 transition"
+                        title="将此输入框模型指派为对话与推理档"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>指派给对话</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsVision()}
+                        className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 transition"
+                        title="将此输入框模型指派为 Vision 档"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>指派给 Vision</span>
+                      </button>
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -508,23 +823,144 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-mono text-xs"
                   />
 
-                  {/* Suggested Model Chips */}
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    <span className="text-[10px] text-slate-500">常用模型推荐:</span>
-                    {getSuggestedModels().map((mod) => (
+                  {/* Discovered & Suggested Model Chips with Capability Badges (BR-MD-01 ~ BR-MD-03) */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5">
+                        <span>{currentDiscovered ? `已探测远端模型 (${currentDiscovered.length}):` : '可用/推荐模型:'}</span>
+                        <span className="text-slate-500 font-normal">点击填入，悬浮可直接分配档位</span>
+                      </span>
                       <button
-                        key={mod}
                         type="button"
-                        onClick={() => handleModelChange(mod)}
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition ${
-                          curModelId === mod
-                            ? 'bg-blue-950 border-blue-500 text-blue-300 font-semibold'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                        }`}
+                        onClick={handleDiscoverModels}
+                        disabled={isDiscovering || (!curProvider?.apiKey && curProvider?.protocol !== 'ollama_native')}
+                        className="text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-40 flex items-center gap-1"
+                        title="向该 Provider 接口重新拉取最新可用模型"
                       >
-                        {mod}
+                        <RefreshCw className={`w-3 h-3 ${isDiscovering ? 'animate-spin' : ''}`} />
+                        <span>探测远端模型</span>
                       </button>
-                    ))}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap max-h-40 overflow-y-auto pr-1">
+                      {displayModels.map((mod) => {
+                        const isSelected = curModelId === mod.id;
+                        const isModelCode = bindings.code.providerId === curProvider.id && bindings.code.modelId === mod.id;
+                        const isModelChat = bindings.chat.providerId === curProvider.id && bindings.chat.modelId === mod.id;
+                        const isModelVision = bindings.vision.providerId === curProvider.id && bindings.vision.modelId === mod.id;
+                        const hasVision = mod.capabilities.includes('vision');
+                        const hasReasoning = mod.capabilities.includes('reasoning');
+                        const hasCode = mod.capabilities.includes('code');
+
+                        return (
+                          <div
+                            key={mod.id}
+                            className={`group inline-flex items-center rounded-lg border transition text-[10px] font-mono ${
+                              isSelected
+                                ? 'bg-blue-950/80 border-blue-500 text-blue-200 font-semibold shadow-sm'
+                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleModelChange(mod.id)}
+                              className="px-2 py-1 flex items-center gap-1 text-left"
+                            >
+                              <span>{mod.name || mod.id}</span>
+                            </button>
+
+                            {/* Assigned Role Badges */}
+                            <div className="flex items-center gap-0.5 pr-1">
+                              {isModelCode && (
+                                <span className="px-1 py-0.2 rounded text-[8px] bg-blue-500/20 text-blue-300 border border-blue-500/30 font-sans" title="当前代码生成档">
+                                  代码
+                                </span>
+                              )}
+                              {isModelChat && (
+                                <span className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-sans" title="当前对话推理档">
+                                  对话
+                                </span>
+                              )}
+                              {isModelVision && (
+                                <span className="px-1 py-0.2 rounded text-[8px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-sans" title="当前 Vision 识图档">
+                                  Vision
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Capability Badges */}
+                            <div className="flex items-center gap-0.5 pr-1 py-0.5">
+                              {hasVision && (
+                                <span
+                                  className="px-1 py-0.2 rounded text-[8px] bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-0.5 font-sans"
+                                  title="支持多模态视觉识图 (Vision)"
+                                >
+                                  <Eye className="w-2.5 h-2.5" />
+                                  <span>Vision</span>
+                                </span>
+                              )}
+                              {hasReasoning && (
+                                <span
+                                  className="px-1 py-0.2 rounded text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5 font-sans"
+                                  title="支持深度思考推理 (Reasoner)"
+                                >
+                                  <Brain className="w-2.5 h-2.5" />
+                                  <span>推理</span>
+                                </span>
+                              )}
+                              {hasCode && (
+                                <span
+                                  className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5 font-sans"
+                                  title="代码专精模型 (Code)"
+                                >
+                                  <Code2 className="w-2.5 h-2.5" />
+                                  <span>代码</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Quick Role Assignment Actions on Hover */}
+                            <div className="hidden group-hover:flex items-center gap-0.5 pr-1 border-l border-slate-800/80 pl-1 py-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetAsCode(mod.id);
+                                }}
+                                className="px-1 py-0.2 rounded text-[8px] bg-blue-900/60 hover:bg-blue-600 text-blue-200 font-sans"
+                                title="直接设为页面代码生成模型"
+                              >
+                                +代码
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetAsChat(mod.id);
+                                }}
+                                className="px-1 py-0.2 rounded text-[8px] bg-emerald-900/60 hover:bg-emerald-600 text-emerald-200 font-sans"
+                                title="直接设为对话与意图推理模型"
+                              >
+                                +对话
+                              </button>
+                              {hasVision && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetAsVision(mod.id);
+                                  }}
+                                  className="px-1 py-0.2 rounded text-[8px] bg-purple-900/60 hover:bg-purple-600 text-purple-200 font-sans"
+                                  title="直接设为视觉反推模型"
+                                >
+                                  +Vision
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -596,6 +1032,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose }) => 
             )}
           </div>
         </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">

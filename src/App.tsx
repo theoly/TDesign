@@ -11,6 +11,52 @@ import { AssetModal } from './components/assets/AssetModal';
 import { ProjectManager } from './components/workspace/ProjectManager';
 import { RestylePanel } from './components/theme/RestylePanel';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
+import { useProjectStore } from './stores/useProjectStore';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
+interface RecoveryBannerProps {
+  uncleanShutdownAt: number;
+  onDismiss: () => void;
+}
+
+export const RecoveryBanner: React.FC<RecoveryBannerProps> = ({ uncleanShutdownAt, onDismiss }) => {
+  const [countdown, setCountdown] = useState(10);
+
+  useEffect(() => {
+    setCountdown(10);
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onDismiss();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [uncleanShutdownAt, onDismiss]);
+
+  return (
+    <div
+      data-testid="recovery-banner"
+      className="px-4 py-2 bg-amber-950/60 border-b border-amber-800/50 text-[11px] text-amber-200 flex items-center justify-between gap-3"
+    >
+      <span>
+        检测到上次未正常关闭（{new Date(uncleanShutdownAt).toLocaleString('zh-CN')}）。
+        已恢复至最后一次自动保存；会话记录为追加写入，最多丢失最后一轮。
+      </span>
+      <button
+        onClick={onDismiss}
+        className="text-amber-400 hover:text-amber-200 shrink-0 font-medium px-2 py-0.5 rounded hover:bg-amber-900/40 transition cursor-pointer"
+        title="点击提前关闭提示"
+      >
+        知道了 ({countdown}s)
+      </button>
+    </div>
+  );
+};
 
 const Workspace: React.FC = () => {
   // T-AE-44 / PRD §3.8.5：上次异常退出时提示恢复
@@ -18,27 +64,28 @@ const Workspace: React.FC = () => {
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'provider' | 'quick_prompts'>('provider');
   const [showAssetModal, setShowAssetModal] = useState(false);
   // T-AE-26/27: Polish 与 Restyle 共用同一面板——Polish 即队列只含一项的重塑
   const [restyleScope, setRestyleScope] = useState<'all' | string | null>(null);
+
+  const handleOpenSettings = (tab?: 'provider' | 'quick_prompts') => {
+    setSettingsTab(tab || 'provider');
+    setShowSettingsModal(true);
+  };
 
   return (
     <div className="w-screen h-screen flex flex-col bg-slate-950 overflow-hidden font-sans">
       <Header
         onOpenExport={() => setShowExportModal(true)}
-        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenSettings={() => handleOpenSettings('provider')}
       />
 
       {uncleanShutdownAt !== null && (
-        <div className="px-4 py-2 bg-amber-950/60 border-b border-amber-800/50 text-[11px] text-amber-200 flex items-center justify-between gap-3">
-          <span>
-            检测到上次未正常关闭（{new Date(uncleanShutdownAt).toLocaleString('zh-CN')}）。
-            已恢复至最后一次自动保存；会话记录为追加写入，最多丢失最后一轮。
-          </span>
-          <button onClick={dismissRecovery} className="text-amber-400 hover:text-amber-200 shrink-0">
-            知道了
-          </button>
-        </div>
+        <RecoveryBanner
+          uncleanShutdownAt={uncleanShutdownAt}
+          onDismiss={dismissRecovery}
+        />
       )}
 
       <div className="flex-1 flex overflow-hidden relative">
@@ -53,14 +100,25 @@ const Workspace: React.FC = () => {
           <InfiniteCanvas onPolish={(sid) => setRestyleScope(sid)} />
         </div>
 
-        <PropertyInspector />
+        <ErrorBoundary
+          fallbackTitle="属性检查器渲染异常"
+          fallbackMessage="当前选中元素的属性解析或渲染遇到异常，已隔离保护。点击下方按钮可重置选区。"
+          onReset={() => useProjectStore.getState().selectNode(null)}
+        >
+          <PropertyInspector />
+        </ErrorBoundary>
 
-        <ChatDrawer onOpenSettings={() => setShowSettingsModal(true)} />
+        <ChatDrawer onOpenSettings={handleOpenSettings} />
       </div>
 
       {showThemeModal && <ThemeEditor onClose={() => setShowThemeModal(false)} />}
       {showExportModal && <ExportModal onClose={() => setShowExportModal(false)} />}
-      {showSettingsModal && <AIProviderModal onClose={() => setShowSettingsModal(false)} />}
+      {showSettingsModal && (
+        <AIProviderModal
+          initialTab={settingsTab}
+          onClose={() => setShowSettingsModal(false)}
+        />
+      )}
       {showAssetModal && <AssetModal onClose={() => setShowAssetModal(false)} />}
       {restyleScope !== null && (
         <RestylePanel scope={restyleScope} onClose={() => setRestyleScope(null)} />
@@ -82,7 +140,18 @@ export const App: React.FC = () => {
     refresh();
   }, []);
 
-  return view === 'workspace' ? <Workspace /> : <ProjectManager />;
+  return (
+    <ErrorBoundary
+      fallbackTitle="AI Designer Studio 遇到非预期异常"
+      fallbackMessage="已拦截错误以保护工程数据安全，应用未崩溃。您可以尝试重置状态或刷新。"
+      onReset={() => {
+        useProjectStore.getState().selectNode(null);
+        refresh();
+      }}
+    >
+      {view === 'workspace' ? <Workspace /> : <ProjectManager />}
+    </ErrorBoundary>
+  );
 };
 
 export default App;

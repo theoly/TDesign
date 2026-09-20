@@ -10,14 +10,22 @@ export interface UsageRecord {
   estimatedCostUsd: number;
 }
 
-interface UsageState {
+export interface UsageState {
+  // 历史累计 (All-time, 持久化至 localStorage)
   totalCalls: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   totalEstimatedCostUsd: number;
   history: UsageRecord[];
 
+  // 本轮会话 (Session, 内存维护，支持重置)
+  sessionCalls: number;
+  sessionInputTokens: number;
+  sessionOutputTokens: number;
+  sessionEstimatedCostUsd: number;
+
   recordUsage: (record: Omit<UsageRecord, 'id' | 'timestamp'>) => void;
+  resetSessionUsage: () => void;
   clearUsage: () => void;
 }
 
@@ -45,10 +53,16 @@ function loadStoredUsage(): {
   };
 }
 
-const initial = loadStoredUsage();
+const initialAllTime = loadStoredUsage();
 
 export const useUsageStore = create<UsageState>((set, get) => ({
-  ...initial,
+  ...initialAllTime,
+
+  // 本轮会话初始状态
+  sessionCalls: 0,
+  sessionInputTokens: 0,
+  sessionOutputTokens: 0,
+  sessionEstimatedCostUsd: 0,
 
   recordUsage: (data) => {
     set((state) => {
@@ -58,7 +72,7 @@ export const useUsageStore = create<UsageState>((set, get) => ({
         timestamp: Date.now()
       };
 
-      const next = {
+      const nextAllTime = {
         totalCalls: state.totalCalls + 1,
         totalInputTokens: state.totalInputTokens + data.inputTokens,
         totalOutputTokens: state.totalOutputTokens + data.outputTokens,
@@ -67,12 +81,27 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       };
 
       try {
-        localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(nextAllTime));
       } catch (e) {
         // ignore
       }
 
-      return next;
+      return {
+        ...nextAllTime,
+        sessionCalls: state.sessionCalls + 1,
+        sessionInputTokens: state.sessionInputTokens + data.inputTokens,
+        sessionOutputTokens: state.sessionOutputTokens + data.outputTokens,
+        sessionEstimatedCostUsd: Number((state.sessionEstimatedCostUsd + data.estimatedCostUsd).toFixed(6))
+      };
+    });
+  },
+
+  resetSessionUsage: () => {
+    set({
+      sessionCalls: 0,
+      sessionInputTokens: 0,
+      sessionOutputTokens: 0,
+      sessionEstimatedCostUsd: 0
     });
   },
 
@@ -89,6 +118,26 @@ export const useUsageStore = create<UsageState>((set, get) => ({
     } catch (e) {
       // ignore
     }
-    set(empty);
+    set({
+      ...empty,
+      sessionCalls: 0,
+      sessionInputTokens: 0,
+      sessionOutputTokens: 0,
+      sessionEstimatedCostUsd: 0
+    });
   }
 }));
+
+/**
+ * 格式化 Token 数量（如 1,240, 12.5k）
+ */
+export function formatTokenCount(num: number): string {
+  if (!num || num < 0) return '0';
+  if (num >= 1_000_000) {
+    return `${(num / 1_000_000).toFixed(1)}M`;
+  }
+  if (num >= 1_000) {
+    return `${(num / 1_000).toFixed(1)}k`;
+  }
+  return num.toLocaleString();
+}

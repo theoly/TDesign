@@ -29,6 +29,40 @@ const SPACING = { '0': 0, '1': 4, '2': 8, '3': 12, '4': 16, '5': 20, '6': 24, '8
 /** 深色下阴影必须更强更黑才可见，浅色下则需克制 */
 const shadow = (light: string, dark: string) => pair(light, dark);
 
+// ── 0. Neutral Modern (现代中性微质感 · 默认主题) ─────────────────────────
+export const neutralModernTheme: DesignSystem = {
+  id: 'theme-neutral-modern',
+  name: 'Neutral Modern (默认现代中性)',
+  tokens: {
+    colors: {
+      primary: { '50': '#eff6ff', '100': '#dbeafe', '200': '#bfdbfe', '500': '#2563eb', '600': '#1d4ed8', '700': '#1e40af', '900': '#1e3a8a' },
+      neutral: { '50': '#fafbfc', '100': '#f1f3f5', '200': '#e3e6ea', '500': '#64748b', '700': '#334155', '900': '#0f172a' },
+      success: '#16a34a',
+      warning: '#d97706',
+      danger: '#dc2626',
+      background: pair('#f8fafc', '#090d16'),
+      surface: pair('#ffffff', '#121826'),
+      surfaceAlt: pair('#f1f5f9', '#1a2234'),
+      textPrimary: pair('#0f172a', '#f8fafc'),
+      textSecondary: pair('#64748b', '#94a3b8'),
+      border: pair('#e2e8f0', '#222d42')
+    },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    spacing: SPACING,
+    radius: { none: '0px', sm: '3px', md: '6px', lg: '10px', xl: '14px', full: '9999px' },
+    shadows: {
+      sm: shadow('0 1px 2px 0 rgba(15, 23, 42, 0.05)', '0 1px 3px 0 rgba(0, 0, 0, 0.6)'),
+      md: shadow('0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05)', '0 4px 10px -2px rgba(0, 0, 0, 0.7)'),
+      lg: shadow('0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.05)', '0 12px 24px -6px rgba(0, 0, 0, 0.8)'),
+      soft: shadow('0 6px 20px -2px rgba(37, 99, 235, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04)', '0 6px 24px -2px rgba(37, 99, 235, 0.25)'),
+      card: shadow('0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05)', '0 1px 4px 0 rgba(0, 0, 0, 0.65)'),
+      glow: shadow('0 0 0 1px rgba(37, 99, 235, 0.2), 0 4px 14px -2px rgba(37, 99, 235, 0.25)', '0 0 0 1px rgba(37, 99, 235, 0.4), 0 6px 18px -2px rgba(37, 99, 235, 0.45)')
+    },
+    blur: { sm: '6px', md: '12px', lg: '20px' },
+    personality: { density: 'standard', borderAlpha: 0.55 }
+  }
+};
+
 // ── 1. Apple / Vercel 极简性冷淡 ───────────────────────────────────────────
 export const minimalistSlateTheme: DesignSystem = {
   id: 'theme-minimalist-slate',
@@ -187,16 +221,87 @@ export const cyberCyanTheme: DesignSystem = {
   }
 };
 
+// ── 5. Ant Design 经典企业级 ──────────────────────────────────────────────
+export const antBlueTheme: DesignSystem = {
+  id: 'theme-ant-blue',
+  name: 'Ant Design (经典企业级)',
+  tokens: {
+    colors: {
+      primary: { '50': '#e6f4ff', '100': '#bae0ff', '200': '#91caff', '500': '#1677ff', '600': '#0958d9', '700': '#003eb3', '900': '#002c8c' },
+      neutral: { '50': '#fafafa', '100': '#f5f5f5', '200': '#e8e8e8', '500': '#8c8c8c', '700': '#595959', '900': '#1f1f1f' },
+      success: '#52c41a',
+      warning: '#faad14',
+      danger: '#ff4d4f',
+      background: pair('#f5f5f5', '#000000'),
+      surface: pair('#ffffff', '#141414'),
+      surfaceAlt: pair('#fafafa', '#1f1f1f'),
+      textPrimary: pair('#1f1f1f', '#ffffff'),
+      textSecondary: pair('#8c8c8c', '#a6a6a6'),
+      border: pair('#d9d9d9', '#303030')
+    },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    spacing: SPACING,
+    radius: { none: '0px', sm: '2px', md: '6px', lg: '8px', xl: '12px', full: '9999px' },
+    shadows: {
+      sm: shadow('0 1px 2px 0 rgba(0, 0, 0, 0.03)', '0 1px 2px 0 rgba(0, 0, 0, 0.5)'),
+      md: shadow('0 3px 6px -1px rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.07)', '0 3px 6px -1px rgba(0, 0, 0, 0.6)'),
+      lg: shadow('0 10px 20px rgba(0, 0, 0, 0.15)', '0 10px 20px rgba(0, 0, 0, 0.75)'),
+      soft: shadow('0 2px 8px rgba(0, 0, 0, 0.08)', '0 2px 8px rgba(0, 0, 0, 0.55)'),
+      card: shadow('0 1px 2px 0 rgba(0, 0, 0, 0.03)', '0 1px 2px 0 rgba(0, 0, 0, 0.45)'),
+      glow: shadow('0 0 0 2px rgba(22, 119, 255, 0.2)', '0 0 0 2px rgba(22, 119, 255, 0.35)')
+    },
+    blur: { sm: '4px', md: '8px', lg: '16px' },
+    personality: { density: 'standard', borderAlpha: 0.8 }
+  }
+};
+
+// ── 6. Supabase 极客黑绿 ──────────────────────────────────────────────────
+export const supabaseEmeraldTheme: DesignSystem = {
+  id: 'theme-supabase-emerald',
+  name: 'Supabase Style (极客黑绿)',
+  tokens: {
+    colors: {
+      primary: { '50': '#ecfdf5', '100': '#d1fae5', '200': '#a7f3d0', '500': '#10b981', '600': '#059669', '700': '#047857', '900': '#064e3b' },
+      neutral: { '50': '#f4f4f5', '100': '#e4e4e7', '200': '#d4d4d8', '500': '#71717a', '700': '#27272a', '900': '#18181b' },
+      success: '#34d399',
+      warning: '#fbbf24',
+      danger: '#f87171',
+      background: pair('#fafafa', '#121212'),
+      surface: pair('#ffffff', '#1c1c1c'),
+      surfaceAlt: pair('#f4f4f5', '#242424'),
+      textPrimary: pair('#18181b', '#ededed'),
+      textSecondary: pair('#71717a', '#a1a1aa'),
+      border: pair('#e4e4e7', '#2e2e2e')
+    },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    spacing: SPACING,
+    radius: { none: '0px', sm: '2px', md: '4px', lg: '6px', xl: '8px', full: '9999px' },
+    shadows: {
+      sm: shadow('0 1px 2px 0 rgba(0, 0, 0, 0.05)', '0 1px 2px 0 rgba(0, 0, 0, 0.8)'),
+      md: shadow('0 4px 6px -1px rgba(0, 0, 0, 0.1)', '0 4px 12px rgba(0, 0, 0, 0.85)'),
+      lg: shadow('0 10px 15px -3px rgba(0, 0, 0, 0.1)', '0 12px 24px rgba(0, 0, 0, 0.9)'),
+      soft: shadow('0 4px 16px -2px rgba(16, 185, 129, 0.1)', '0 4px 20px -2px rgba(16, 185, 129, 0.25)'),
+      card: shadow('0 1px 3px 0 rgba(0, 0, 0, 0.06)', '0 1px 3px 0 rgba(0, 0, 0, 0.7)'),
+      glow: shadow('0 0 0 1px rgba(16, 185, 129, 0.25), 0 0 16px rgba(16, 185, 129, 0.2)', '0 0 0 1px rgba(16, 185, 129, 0.4), 0 0 20px rgba(16, 185, 129, 0.3)')
+    },
+    blur: { sm: '8px', md: '16px', lg: '24px' },
+    personality: { density: 'compact', borderAlpha: 0.65 }
+  }
+};
+
+/** 默认主题 */
+export const defaultTheme = neutralModernTheme;
+
 /** 兼容既有引用名 */
 export const techBlueTheme = techIndigoTheme;
 
 export const themePresets: ThemePreset[] = [
   {
-    id: 'minimalist-slate',
-    name: '极简性冷淡',
-    description: 'Apple / Vercel 风：极简留白、精细黑白对比、近乎无阴影',
-    primaryColor: '#09090b',
-    theme: minimalistSlateTheme
+    id: 'neutral-modern',
+    name: 'Neutral Modern',
+    description: '现代中性微质感 · 默认主题：克制沉稳冷灰阶、精致微质感阴影、适中圆角',
+    primaryColor: '#2563eb',
+    theme: neutralModernTheme
   },
   {
     id: 'tech-blue',
@@ -213,11 +318,32 @@ export const themePresets: ThemePreset[] = [
     theme: warmCoralTheme
   },
   {
+    id: 'minimalist-slate',
+    name: '极简性冷淡',
+    description: 'Apple / Vercel 风：极简留白、精细黑白对比、近乎无阴影',
+    primaryColor: '#09090b',
+    theme: minimalistSlateTheme
+  },
+  {
     id: 'emerald-nature',
     name: '极客赛博',
     description: '数据大屏风：电光青蓝、冷色辉光、强毛玻璃、紧凑锐利',
     primaryColor: '#06b6d4',
     theme: cyberCyanTheme
+  },
+  {
+    id: 'ant-blue',
+    name: 'Ant Design',
+    description: '经典企业级：沉稳科技蓝、规整结构、标准圆角与清晰边框',
+    primaryColor: '#1677ff',
+    theme: antBlueTheme
+  },
+  {
+    id: 'supabase-emerald',
+    name: 'Supabase Style',
+    description: '极客黑绿风：电光翠绿点缀、深邃黑底、高对比开发质感',
+    primaryColor: '#10b981',
+    theme: supabaseEmeraldTheme
   }
 ];
 

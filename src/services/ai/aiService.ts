@@ -1,6 +1,8 @@
 import { AIProviderConfig, ErrorKind, StreamEvent } from '../../types/provider';
 import { useUsageStore } from '../../stores/useUsageStore';
 import { isTauri, invoke, Channel } from '@tauri-apps/api/core';
+import { ModelDiscoveryService } from './modelDiscoveryService';
+import { DiscoveredModel } from './engine/core/multimodalGuard';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -235,19 +237,54 @@ export class AIService {
     modelId: string,
     messages: ChatMessage[],
     onEvent: (ev: StreamEvent) => void,
-    timeoutMs = 45000
+    timeoutMs = 300000
   ): { abort: () => void; promise: Promise<void> } {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
+    let isAborted = false;
+
+    // 1. 全局最大总时限（兜底保护，默认 300s，对齐 Rust 端超时）
+    const maxTimeoutMs = timeoutMs;
+    // 2. 流式活跃心跳窗口（默认 90s：每次收到有效数据分片自动刷新；若连续 90s 无任何新分片则判定挂死）
+    const inactivityTimeoutMs = Math.min(timeoutMs, 90000);
+
+    let maxTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const clearAllTimers = () => {
+      if (maxTimeoutId) {
+        clearTimeout(maxTimeoutId);
+        maxTimeoutId = null;
+      }
+      if (inactivityTimeoutId) {
+        clearTimeout(inactivityTimeoutId);
+        inactivityTimeoutId = null;
+      }
+    };
+
+    const triggerTimeout = (reason: string) => {
+      clearAllTimers();
+      if (isAborted) return;
       controller.abort();
       onEvent({
         type: 'Error',
         kind: 'timeout',
-        message: `请求在 ${timeoutMs}ms 后超时`
+        message: reason
       });
-    }, timeoutMs);
+    };
 
-    let isAborted = false;
+    maxTimeoutId = setTimeout(() => {
+      triggerTimeout(`请求超时: 超过最大允许时限 (${Math.round(maxTimeoutMs / 1000)}s)`);
+    }, maxTimeoutMs);
+
+    const refreshInactivityTimer = () => {
+      if (inactivityTimeoutId) clearTimeout(inactivityTimeoutId);
+      inactivityTimeoutId = setTimeout(() => {
+        triggerTimeout(`数据流传输超时: 超过 ${Math.round(inactivityTimeoutMs / 1000)}s 未收到任何新分片`);
+      }, inactivityTimeoutMs);
+    };
+
+    // 初始化等待首包定时器
+    refreshInactivityTimer();
     const inputCharsEstimated = messages.reduce((acc, m) => acc + m.content.length + (m.imageUrl ? 1000 : 0), 0);
     const processor = new StreamChunkProcessor(provider, modelId, inputCharsEstimated, onEvent);
 
@@ -394,16 +431,17 @@ export class AIService {
             channel.onmessage = (payload) => {
               if (isAborted) return;
               if (payload.type === 'Chunk' && payload.data) {
+                refreshInactivityTimer();
                 processor.processChunk(payload.data);
               } else if (payload.type === 'Error') {
-                clearTimeout(timeoutId);
+                clearAllTimers();
                 onEvent({
                   type: 'Error',
                   kind: 'network_error',
                   message: payload.data || '网络请求异常'
                 });
               } else if (payload.type === 'Done') {
-                clearTimeout(timeoutId);
+                clearAllTimers();
                 processor.finish();
                 onEvent({ type: 'Done', finish_reason: 'stop' });
               }
@@ -443,9 +481,10 @@ export class AIService {
           signal: controller.signal
         });
 
-        clearTimeout(timeoutId);
+        refreshInactivityTimer();
 
         if (!resp.ok) {
+          clearAllTimers();
           const status = resp.status;
           const text = await resp.text().catch(() => '');
           let kind: ErrorKind = 'network_error';
@@ -475,6 +514,7 @@ export class AIService {
         }
 
         if (!resp.body) {
+          clearAllTimers();
           onEvent({ type: 'Error', kind: 'invalid_response', message: '响应体为空' });
           return;
         }
@@ -485,14 +525,16 @@ export class AIService {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
+            clearAllTimers();
             processor.finish();
             break;
           }
+          refreshInactivityTimer();
           const chunkText = decoder.decode(value, { stream: true });
           processor.processChunk(chunkText);
         }
       } catch (err: unknown) {
-        clearTimeout(timeoutId);
+        clearAllTimers();
         if (isAborted) return;
         const e = err as Error;
         if (e.name === 'AbortError') return;
@@ -513,7 +555,7 @@ export class AIService {
     return {
       abort: () => {
         isAborted = true;
-        clearTimeout(timeoutId);
+        clearAllTimers();
         controller.abort();
       },
       promise
@@ -557,6 +599,53 @@ export class AIService {
       return { success: false, message: '未收到有效响应' };
     } catch (e: any) {
       return { success: false, message: e.message || '连接失败' };
+    }
+  }
+
+  /**
+   * 连通性测试并联动探测 Provider 可用模型与能力标签 (BR-MD-01 ~ BR-MD-03)
+   */
+  public static async testConnectionAndDiscoverModels(
+    provider: AIProviderConfig,
+    modelId: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    discoveredModels: DiscoveredModel[];
+    visionCount: number;
+  }> {
+    // 1. 先执行连通性测试
+    const connTest = await this.testConnection(provider, modelId);
+    if (!connTest.success) {
+      return {
+        success: false,
+        message: connTest.message,
+        discoveredModels: [],
+        visionCount: 0
+      };
+    }
+
+    // 2. 连通成功后，并发探测远端模型列表与能力标签
+    try {
+      const discovery = await ModelDiscoveryService.discoverModels(provider);
+      const visionCount = discovery.models.filter((m) => m.capabilities.includes('vision')).length;
+      const countMsg = discovery.models.length > 0
+        ? ` (已自动探测到 ${discovery.models.length} 个可用模型，含 ${visionCount} 个多模态视觉模型)`
+        : '';
+
+      return {
+        success: true,
+        message: `连通性测试成功${countMsg}`,
+        discoveredModels: discovery.models,
+        visionCount
+      };
+    } catch {
+      return {
+        success: true,
+        message: '连通性测试成功',
+        discoveredModels: [],
+        visionCount: 0
+      };
     }
   }
 }

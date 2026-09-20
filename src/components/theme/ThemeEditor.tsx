@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { themePresets } from '../../utils/themePresets';
 import { getBaseCss } from '../../styles/baseCss';
 import { StylePicker } from './StylePicker';
+import { DesignSystemVisualPreview } from './DesignSystemVisualPreview';
 import { Bookmark, Check, ChevronDown, Code, FileText, Moon, Palette, Plus, Search, Sparkles, Sun } from 'lucide-react';
 import rawBaseCss from '../../styles/base.css?raw';
 import { resolveDesignProse } from '../../services/ai/engine/context/designProseProvider';
@@ -79,57 +80,87 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 lg:p-6">
+      <div className="w-full max-w-6xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[90vh]">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Palette className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold text-slate-100 text-sm">设计系统与规范管理中心</span>
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+              <Palette className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-100 text-sm">设计系统与规范管理中心</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                  {designSystem.name}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                实时调节 Design Tokens 与设计决策，右侧即时可视化联动呈现规范样板
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none">
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-lg flex items-center justify-center transition"
+          >
             ×
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center border-b border-slate-800 bg-slate-950 px-4 text-xs font-medium">
-          <button
-            onClick={() => setActiveTab('tokens')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
-              activeTab === 'tokens'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Palette className="w-3.5 h-3.5" />
-            <span>Design Tokens 变量</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('decisions')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
-              activeTab === 'decisions'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-            <span>工程约定与记忆 (D20)</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('base_css')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
-              activeTab === 'base_css'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Code className="w-3.5 h-3.5 text-emerald-400" />
-            <span>基座样式 (Base CSS)</span>
-          </button>
+        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-4 text-xs font-medium">
+          <div className="flex items-center">
+            <button
+              onClick={() => setActiveTab('tokens')}
+              className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
+                activeTab === 'tokens'
+                  ? 'border-blue-500 text-blue-400 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span>Design Tokens 变量</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('decisions')}
+              className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
+                activeTab === 'decisions'
+                  ? 'border-blue-500 text-blue-400 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+              <span>工程约定与记忆 (D20)</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('base_css')}
+              className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
+                activeTab === 'base_css'
+                  ? 'border-blue-500 text-blue-400 font-semibold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Code className="w-3.5 h-3.5 text-emerald-400" />
+              <span>基座样式 (Base CSS)</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 py-2">
+            <button
+              onClick={() => setShowStylePicker(true)}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-slate-700"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>并排对比采纳</span>
+            </button>
+          </div>
         </div>
 
-        <div className="p-6 space-y-6 text-xs max-h-[70vh] overflow-y-auto">
+        {/* Split-pane Body */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0 overflow-hidden">
+          {/* Left Panel: Configuration & Rules */}
+          <div className="lg:col-span-5 border-r border-slate-800 p-5 space-y-5 text-xs overflow-y-auto bg-slate-900/60">
           {/* Tab 1: Tokens */}
           {activeTab === 'tokens' && (
             <>
@@ -481,10 +512,24 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </div>
             </div>
           )}
+          </div>
+
+          {/* Right Panel: OpenDesign-style Realtime Visual Preview */}
+          <div className="hidden lg:flex lg:col-span-7 min-h-0 overflow-hidden flex-col bg-slate-950/40">
+            <DesignSystemVisualPreview
+              theme={designSystem}
+              colorMode={settings.colorMode}
+              onColorModeChange={setColorMode}
+              className="h-full border-0 rounded-none bg-transparent"
+            />
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
+        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-between items-center">
+          <div className="text-[11px] text-slate-500">
+            预设切换与参数调整将实时同步至画框沙箱与设计令牌
+          </div>
           <button
             onClick={onClose}
             className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-xs transition shadow"

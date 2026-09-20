@@ -34,7 +34,9 @@ async fn proxy_stream_request(
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(60))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(300)) // 5 分钟超时，满足大模型复杂页面思考与长文本流式生成
+        .tcp_keepalive(Some(std::time::Duration::from_secs(15))) // 保持底层 TCP 连接活跃，防止网关意外切断长连接
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -153,6 +155,7 @@ pub fn run() {
             project_fs::project_read_tail_lines,
             project_fs::project_read_all_lines,
             project_fs::project_write_binary,
+            project_fs::project_read_binary,
             project_fs::project_list_dir,
             project_fs::project_delete
         ])

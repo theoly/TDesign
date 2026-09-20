@@ -8,3 +8,8 @@ AGENTS.md
 bun.lock
 .env
 .env.*
+.claude/
+.codegraph/
+.gemini/
+GEMINI.md
+.mcp.json

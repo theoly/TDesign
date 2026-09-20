@@ -1,7 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
-import { STYLE_TAGS, buildStyleTagDirectives } from '../../services/ai/styleTags';
-import { useAIEngineChat } from '../../services/ai/engine/react/useAIEngineChat';
+import { useAIConfigStore } from '../../stores/useAIConfigStore';
+import { supportsVision } from '../../services/ai/engine/core/multimodalGuard';
+import { useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
+import {
+  useAIEngineChat,
+  hasExplicitModifyIntent,
+  parseReferencedElement,
+  extractCleanUserPrompt
+} from '../../services/ai/engine/react/useAIEngineChat';
+import { useUsageStore, formatTokenCount } from '../../stores/useUsageStore';
 import {
   Send,
   Bot,
@@ -22,11 +30,23 @@ import {
   XCircle,
   Loader2,
   AlertTriangle,
-  ShieldAlert
+  ShieldAlert,
+  Pin,
+  FileCode,
+  ExternalLink,
+  RefreshCw,
+  Undo2,
+  Zap,
+  ArrowDown,
+  Settings,
+  Activity,
+  Crosshair,
+  ZoomIn
 } from 'lucide-react';
+import { LocateTarget } from '../../utils/tokenLint';
 
 interface ChatDrawerProps {
-  onOpenSettings: () => void;
+  onOpenSettings?: (tab?: 'provider' | 'quick_prompts') => void;
 }
 
 interface ThinkingStep {
@@ -61,61 +81,207 @@ function getThinkingSteps(stage?: number, isGenerating?: boolean, isStopped?: bo
   ];
 }
 
-export function extractHtml(raw: string): string | null {
-  if (!raw || typeof raw !== 'string') return null;
-
-  // 1. Remove <think>...</think> reasoning tags
-  let cleaned = raw.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
-  if (!cleaned) return null;
-
-  // 2. Try markdown code block ```html ... ``` or ```xml ... ``` or ``` ... ```
-  const codeBlockMatch = cleaned.match(/```(?:html|htm|xml)?\s*\n?([\s\S]*?)(?:```|$)/i);
-  if (codeBlockMatch && codeBlockMatch[1]?.trim()) {
-    const candidate = codeBlockMatch[1].trim();
-    if (/<[a-z!][\s\S]*>/i.test(candidate)) {
-      return candidate;
-    }
-  }
-
-  // 3. Fallback: match direct HTML starting from container or doctype/html tag
-  const tagStartMatch = cleaned.match(/<(div|main|section|form|article|header|body|html|dialog|table)\b[^>]*>/i);
-  if (tagStartMatch && tagStartMatch.index !== undefined) {
-    const fromStart = cleaned.slice(tagStartMatch.index);
-    const lastCloseMatch = fromStart.match(/<\/(div|main|section|form|article|header|body|html|dialog|table)>[^<]*$/i);
-    if (lastCloseMatch && lastCloseMatch.index !== undefined) {
-      const endIndex = lastCloseMatch.index + lastCloseMatch[0].length;
-      return fromStart.slice(0, endIndex).trim();
-    }
-    return fromStart.trim();
-  }
-
-  // 4. Any HTML fragment containing container/semantic tags
-  if (/<(div|main|section|form|article|header|body|html|dialog|card|p|h[1-6]|ul|table)\b/i.test(cleaned)) {
-    return cleaned;
-  }
-
-  return null;
-}
-
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   const [input, setInput] = useState('');
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [attachedImage, setAttachedImage] = useState<{ name: string; dataUrl: string } | null>(null);
-  // T-AE-21: 风格标签仅影响本轮请求，不写入工程
-  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { globalPrompts } = useQuickPromptsStore();
+  const projectPrompts = useProjectStore((state) => state.quickPrompts) || [];
+  const allQuickPrompts = [...projectPrompts, ...globalPrompts];
+
+  const handleInsertQuickPrompt = (content: string) => {
+    setInput((prev) => {
+      if (!prev.trim()) {
+        return content;
+      }
+      return prev.endsWith(' ') || prev.endsWith('\n') ? `${prev}${content}` : `${prev} ${content}`;
+    });
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  };
   const [expandedThinkingIds, setExpandedThinkingIds] = useState<Record<string, boolean>>({});
+  const [expandedCodeIds, setExpandedCodeIds] = useState<Record<string, boolean>>({});
+  const [showUsageDetails, setShowUsageDetails] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!previewImageUrl) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPreviewImageUrl(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewImageUrl]);
+
+  const {
+    sessionCalls,
+    sessionInputTokens,
+    sessionOutputTokens,
+    totalCalls,
+    totalInputTokens,
+    totalOutputTokens,
+    resetSessionUsage
+  } = useUsageStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const shouldAutoScrollRef = useRef(true);
 
-  const { screens, settings, stagedScreen, setActiveScreen } = useProjectStore();
+  const toggleCodeExpand = (msgId: string) => {
+    setExpandedCodeIds((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  const {
+    screens,
+    settings,
+    stagedScreen,
+    activeScreenId,
+    selectedNode,
+    setActiveScreen,
+    panToScreen,
+    pendingNodeRef,
+    clearPendingNodeRef,
+    setPendingNodeRef,
+    pendingAuditReport,
+    clearPendingAuditReport
+  } = useProjectStore();
+  const { providers, bindings } = useAIConfigStore();
   const engine = useAIEngineChat();
 
-  const promptTemplates = [
-    '创建 SaaS 移动端订单明细页',
-    '做一个高端科技感数据分析看板',
-    '将当前画框重构为极简留白风格',
-    '本工程按钮统一采用胶囊圆角'
-  ];
+  // 监听并接收来自属性面板等的「一键评测」推送报告
+  useEffect(() => {
+    if (pendingAuditReport) {
+      engine.postAuditMessage(pendingAuditReport);
+      clearPendingAuditReport();
+    }
+  }, [pendingAuditReport, clearPendingAuditReport, engine]);
+
+  // 定位评测目标（单元素/最小包含父区块/整页，联动视口平移聚焦）
+  const handleLocateAuditTarget = (target: LocateTarget) => {
+    useProjectStore.getState().panToScreen(target.screenId);
+    if (target.type === 'element' || target.type === 'block') {
+      if (target.nid) {
+        useProjectStore.getState().selectNodeByNid(target.screenId, target.nid);
+      }
+    } else {
+      useProjectStore.getState().selectNode(null);
+    }
+  };
+
+  const activeCodeProv = providers.find((p) => p.id === bindings.code.providerId);
+  const activeVisionProv = providers.find((p) => p.id === bindings.vision.providerId);
+  const codeSupportsVision = supportsVision(activeCodeProv, bindings.code.modelId);
+  const visionReady = Boolean(activeVisionProv && (activeVisionProv.apiKey || activeVisionProv.protocol === 'ollama_native'));
+
+  const activeScreen = activeScreenId ? screens[activeScreenId] : null;
+
+  // 页面与元素引用状态（默认非启用，点击页面不自动引用）
+  const [isPageReferenced, setIsPageReferenced] = useState(false);
+  const [isElementReferenced, setIsElementReferenced] = useState(false);
+
+  // 画布切换选中画框时，重置引用状态为非启用，并清理孤立元素引用
+  const prevActiveScreenIdRef = useRef<string | null>(activeScreenId);
+  useEffect(() => {
+    if (prevActiveScreenIdRef.current !== activeScreenId) {
+      prevActiveScreenIdRef.current = activeScreenId;
+      setIsPageReferenced(false);
+      setIsElementReferenced(false);
+      if (pendingNodeRef) {
+        clearPendingNodeRef();
+      }
+    }
+  }, [activeScreenId, pendingNodeRef, clearPendingNodeRef]);
+
+  // 当外部设置 pendingNodeRef（如属性面板添加到对话）时，自动同步点亮元素与页面引用
+  useEffect(() => {
+    if (pendingNodeRef) {
+      setIsElementReferenced(true);
+      setIsPageReferenced(true);
+    }
+  }, [pendingNodeRef]);
+
+  // 当 pendingNodeRef 被清除时，同步关闭元素引用
+  useEffect(() => {
+    if (!pendingNodeRef && isElementReferenced) {
+      setIsElementReferenced(false);
+    }
+  }, [pendingNodeRef, isElementReferenced]);
+
+  // 切换页面引用状态
+  const handleTogglePageRef = () => {
+    if (!activeScreen) return;
+    setIsPageReferenced((prev) => {
+      const next = !prev;
+      // 若关闭页面引用，一并关闭元素引用
+      if (!next && isElementReferenced) {
+        setIsElementReferenced(false);
+        clearPendingNodeRef();
+      }
+      return next;
+    });
+  };
+
+  // 切换元素引用状态
+  const handleToggleElementRef = () => {
+    if (!selectedNode || !activeScreen) return;
+    if (isElementReferenced) {
+      setIsElementReferenced(false);
+      clearPendingNodeRef();
+    } else {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(activeScreen.htmlContent, 'text/html');
+      const el = doc.querySelector(`[data-nid="${selectedNode.nid}"]`);
+      const raw = el?.outerHTML ?? `<${selectedNode.tagName}>`;
+      const htmlSnippet = raw.length > 300 ? raw.slice(0, 300) + '…' : raw;
+      setPendingNodeRef({
+        screenId: selectedNode.screenId,
+        screenName: activeScreen.name,
+        nid: selectedNode.nid,
+        tagName: selectedNode.tagName,
+        htmlSnippet
+      });
+      setIsElementReferenced(true);
+      setIsPageReferenced(true);
+    }
+  };
+
+  const handleDisableElementRef = () => {
+    setIsElementReferenced(false);
+    clearPendingNodeRef();
+  };
+
+  // 剪切板粘贴图片处理 (BR-IMG-01)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            if (ev.target?.result) {
+              const ext = item.type.split('/')[1] || 'png';
+              const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+              const fileName = file.name && file.name !== 'image.png' ? file.name : `剪切板截图_${timeStr}.${ext}`;
+              setAttachedImage({ name: fileName, dataUrl: ev.target.result as string });
+            }
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    }
+  };
 
   const handleInputChange = (val: string) => {
     setInput(val);
@@ -149,11 +315,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     let textToSend = rawPrompt || input.trim();
     if (!textToSend || engine.isGenerating) return;
 
-    if (activeTags.length > 0) {
-      const tagDirectives = buildStyleTagDirectives(activeTags);
-      if (tagDirectives) {
-        textToSend = `${textToSend}\n\n[风格标签指示: ${tagDirectives}]`;
-      }
+    // 注入元素引用上下文（仅当元素引用启用时）
+    const nodeRef = isElementReferenced ? pendingNodeRef : null;
+    if (nodeRef) {
+      textToSend =
+        `[引用元素 nid="${nodeRef.nid}" 画框="${nodeRef.screenName}" 标签=<${nodeRef.tagName}>]\n` +
+        `元素片段:\n${nodeRef.htmlSnippet}\n\n` +
+        textToSend;
     }
 
     setInput('');
@@ -162,7 +330,37 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       : undefined;
     setAttachedImage(null);
 
-    await engine.sendMessage(textToSend, currentAttachment);
+    // 清除元素引用（单次修改后不保留）
+    if (pendingNodeRef) {
+      clearPendingNodeRef();
+      setIsElementReferenced(false);
+    }
+
+    // 发送新消息时重置自动跟随并滚到底部
+    shouldAutoScrollRef.current = true;
+    setIsAtBottom(true);
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    }, 50);
+
+    let referencedScreenId = isPageReferenced ? activeScreenId : null;
+    if (!referencedScreenId && activeScreenId && hasExplicitModifyIntent(textToSend)) {
+      referencedScreenId = activeScreenId;
+    }
+
+    const referencedElementInfo = nodeRef
+      ? {
+          nid: nodeRef.nid,
+          tagName: nodeRef.tagName,
+          screenName: nodeRef.screenName
+        }
+      : undefined;
+
+    await engine.sendMessage(textToSend, currentAttachment, {
+      referencedScreenId,
+      referencedElement: referencedElementInfo,
+      displayText: rawPrompt || input.trim()
+    });
   };
 
   const activeGeneratingMsg = engine.messages.find((m) => m.isGenerating);
@@ -176,18 +374,142 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     }
   }
 
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    if (messagesEndRef.current?.scrollIntoView) {
+      messagesEndRef.current.scrollIntoView({ behavior });
+    } else if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+    shouldAutoScrollRef.current = true;
+    setIsAtBottom(true);
+  };
+
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 35;
+    setIsAtBottom(atBottom);
+    if (atBottom) {
+      shouldAutoScrollRef.current = true;
+    } else {
+      shouldAutoScrollRef.current = false;
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    // 向上滑动滚轮时，立即打断自动跟随
+    if (e.deltaY < 0) {
+      shouldAutoScrollRef.current = false;
+    }
+  };
+
+  // 仅在 AI 输出时才自动滚动到底部；若用户向上滚动取消跟随则暂停滚动
+  useEffect(() => {
+    if (engine.isGenerating) {
+      shouldAutoScrollRef.current = true;
+      setIsAtBottom(true);
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    }
+  }, [engine.isGenerating]);
+
+  useEffect(() => {
+    if (engine.isGenerating && shouldAutoScrollRef.current) {
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    }
+  }, [activeStreamText]);
+
   return (
     <div className="w-80 h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20 select-text">
       {/* Header */}
       <div className="p-3 border-b border-slate-800 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2 font-semibold text-slate-200">
-          <Bot className="w-4 h-4 text-blue-400" />
-          <span>AI 原生设计助手</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-200 flex-shrink-0">
+            <Bot className="w-4 h-4 text-blue-400" />
+            <span>AI 原生助手</span>
+          </div>
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono truncate max-w-[100px]"
+            title={`当前主力模型: ${activeCodeProv?.name || 'DeepSeek'} (${bindings.code.modelId})`}
+          >
+            {bindings.code.modelId}
+          </span>
         </div>
-        <button onClick={onOpenSettings} className="text-blue-400 hover:underline text-[11px]">
+        <button onClick={() => onOpenSettings?.('provider')} className="text-blue-400 hover:underline text-[11px] flex-shrink-0">
           Provider 配置
         </button>
       </div>
+
+      {/* Token Usage Stats Bar */}
+      <div className="px-3 py-1.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+        <button
+          type="button"
+          onClick={() => setShowUsageDetails(!showUsageDetails)}
+          className="flex items-center gap-1 hover:text-slate-200 transition cursor-pointer"
+          title="点击查看 Token 消耗明细与历史总计"
+        >
+          <Zap className="w-3 h-3 text-amber-400 shrink-0" />
+          <span>本轮: <strong className="text-slate-200 font-mono font-medium">{formatTokenCount(sessionInputTokens + sessionOutputTokens)}</strong></span>
+          <span className="text-slate-700">·</span>
+          <span>历史: <strong className="text-slate-300 font-mono font-medium">{formatTokenCount(totalInputTokens + totalOutputTokens)}</strong></span>
+          <ChevronDown className={`w-3 h-3 transition-transform ${showUsageDetails ? 'rotate-180 text-blue-400' : 'text-slate-500'}`} />
+        </button>
+        {sessionCalls > 0 && (
+          <button
+            type="button"
+            onClick={resetSessionUsage}
+            className="text-slate-500 hover:text-slate-300 transition text-[9px] cursor-pointer"
+            title="重置本轮会话计数"
+          >
+            重置本轮
+          </button>
+        )}
+      </div>
+
+      {/* Token Usage Details Dropdown */}
+      {showUsageDetails && (
+        <div className="p-3 bg-slate-950 border-b border-slate-800 space-y-2 text-[11px] select-text">
+          <div className="flex items-center justify-between font-medium text-slate-300">
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Token 消耗明细</span>
+            </div>
+            <button
+              onClick={() => setShowUsageDetails(false)}
+              className="text-slate-500 hover:text-slate-300 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            {/* 本轮会话 */}
+            <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
+              <div className="text-slate-400 font-medium">本轮会话</div>
+              <div className="text-sm font-semibold font-mono text-amber-300">
+                {formatTokenCount(sessionInputTokens + sessionOutputTokens)}
+              </div>
+              <div className="text-slate-500 flex justify-between pt-0.5">
+                <span>入: {formatTokenCount(sessionInputTokens)}</span>
+                <span>出: {formatTokenCount(sessionOutputTokens)}</span>
+              </div>
+              <div className="text-slate-500 text-[9px]">调用: {sessionCalls} 次</div>
+            </div>
+
+            {/* 历史累计 */}
+            <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
+              <div className="text-slate-400 font-medium">历史累计</div>
+              <div className="text-sm font-semibold font-mono text-blue-300">
+                {formatTokenCount(totalInputTokens + totalOutputTokens)}
+              </div>
+              <div className="text-slate-500 flex justify-between pt-0.5">
+                <span>入: {formatTokenCount(totalInputTokens)}</span>
+                <span>出: {formatTokenCount(totalOutputTokens)}</span>
+              </div>
+              <div className="text-slate-500 text-[9px]">调用: {totalCalls} 次</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Streaming Artifact Status Badge (REQ-OD-01 / T-OD-17 / CHK-OD-21) */}
       {streamingArtifactStatus && (
@@ -197,8 +519,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         </div>
       )}
 
-      {/* Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+      {/* Message List Container & Scroll Control */}
+      <div className="flex-1 relative min-h-0 flex flex-col">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          onWheel={handleWheel}
+          className="flex-1 overflow-y-auto p-4 space-y-4 text-xs"
+        >
         {/* Side-by-Side Floating / Inline Bar (D17) */}
         {stagedScreen && (
           <div className="p-3 bg-purple-950/50 border border-purple-800/60 rounded-xl space-y-2 text-purple-200 shadow-md">
@@ -245,7 +573,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             </p>
             <div className="flex items-center gap-2 pt-1">
               <button
-                onClick={engine.forceApply}
+                onClick={() => engine.forceApply()}
                 className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[10px] transition"
               >
                 强制并排放行应用
@@ -471,23 +799,177 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </div>
               )}
 
-              {m.imageUrl && (
-                <div className="mb-2 max-w-[220px] rounded-lg overflow-hidden border border-slate-700 shadow-md">
-                  <img src={m.imageUrl} alt="Reference Screenshot" className="w-full h-auto object-cover" />
+              {/* Token 规范评测报告卡片 (Audit Report Card) */}
+              {m.auditReport && (
+                <div
+                  data-testid="audit-report-card"
+                  className="p-3 bg-slate-900 border border-slate-700/80 rounded-xl space-y-2.5 text-xs shadow-md"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-200">
+                      <Activity className="w-4 h-4 text-amber-400" />
+                      <span>Token 规范评测报告</span>
+                      <span className="text-slate-400 font-normal">(@{m.auditReport.screenName})</span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                        m.auditReport.complianceRate >= 95
+                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                          : 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                      }`}
+                    >
+                      合规度 {m.auditReport.complianceRate}%
+                    </span>
+                  </div>
+
+                  {/* 进度条 */}
+                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        m.auditReport.complianceRate >= 95 ? 'bg-emerald-500' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${m.auditReport.complianceRate}%` }}
+                    />
+                  </div>
+
+                  {/* 一键定位目标操作栏 (如一个页面有多个元素则只定位该页面或包含多个元素的父区块) */}
+                  <div className="pt-0.5">
+                    <button
+                      type="button"
+                      data-testid="locate-audit-target-btn"
+                      onClick={() => handleLocateAuditTarget(m.auditReport!.targetToLocate)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 hover:border-blue-400/60 rounded-lg text-blue-300 transition text-[11px] group cursor-pointer"
+                      title="点击在画布中定位目标元素/父区块/页面"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Crosshair className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+                        <span className="font-medium truncate">{m.auditReport.targetToLocate.label}</span>
+                      </div>
+                      <span className="text-[10px] text-blue-400/90 font-mono ml-2 flex-shrink-0">点击定位 →</span>
+                    </button>
+                  </div>
+
+                  {/* 待优化逃逸点列表 (展示但不要主动修复) */}
+                  {m.auditReport.issues.length > 0 ? (
+                    <div className="space-y-1.5 pt-1 border-t border-slate-800">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>待优化逃逸清单 ({m.auditReport.issues.length} 处)</span>
+                        <span className="text-[10px] text-slate-500">（已禁用自动修复，请核实后微调）</span>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                        {m.auditReport.issues.map((issue, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => handleLocateAuditTarget(m.auditReport!.targetToLocate)}
+                            className="p-2 bg-slate-950/70 hover:bg-slate-950 border border-slate-800/80 hover:border-slate-700 rounded-lg text-[11px] space-y-1 cursor-pointer transition"
+                            title="点击定位包含该问题的区域"
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="w-4 h-4 rounded-full bg-amber-500/10 text-amber-400 font-mono text-[10px] flex items-center justify-center flex-shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <span className="text-slate-300 font-medium truncate">{issue.description}</span>
+                              </div>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono flex-shrink-0">
+                                &lt;{issue.tagName}&gt; #{issue.nid.slice(0, 6)}
+                              </span>
+                            </div>
+                            {issue.rawSnippet && (
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono bg-slate-900/80 px-1.5 py-0.5 rounded truncate">
+                                <span className="text-red-400 flex-shrink-0">逃逸值:</span>
+                                <span className="truncate">{issue.rawSnippet}</span>
+                                {issue.suggestedFix && (
+                                  <>
+                                    <span className="text-slate-600 flex-shrink-0">→</span>
+                                    <span className="text-emerald-400 truncate">{issue.suggestedFix}</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-emerald-950/30 border border-emerald-800/40 rounded-lg text-emerald-300 text-[11px] flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      <span>当前画框规范度 100%，所有类名与样式完全符合设计系统标准！</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {m.sender === 'assistant' && m.imageUrl && (
+                <div
+                  onClick={() => setPreviewImageUrl(m.imageUrl!)}
+                  className="mb-2 max-w-[220px] rounded-lg overflow-hidden border border-slate-700 shadow-md cursor-pointer group relative"
+                  title="点击放大查看"
+                >
+                  <img src={m.imageUrl} alt="Reference Screenshot" className="w-full h-auto object-cover transition duration-200 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-[11px] text-white font-medium backdrop-blur-[1px]">
+                    <ZoomIn className="w-3.5 h-3.5" />
+                    <span>点击放大</span>
+                  </div>
                 </div>
               )}
 
               {/* Text / Result Bubble */}
               {(m.text || m.htmlOutput || m.isStopped || isCurrentGenerating) && (
                 <div
-                  className={`p-3 rounded-xl leading-relaxed whitespace-pre-wrap break-words ${
+                  className={`p-3 rounded-xl leading-relaxed whitespace-pre-wrap break-words max-h-72 overflow-y-auto ${
                     m.sender === 'user'
                       ? 'bg-blue-600 text-white ml-4 shadow-sm'
                       : 'bg-slate-800 text-slate-200 mr-2 border border-slate-700/60'
                   }`}
                 >
                   {m.sender === 'user' ? (
-                    m.text
+                    (() => {
+                      const refElem = m.referencedElement || parseReferencedElement(m.text);
+                      const displayPrompt = m.displayText || extractCleanUserPrompt(m.text);
+                      return (
+                        <div className="space-y-2">
+                          {refElem ? (
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-700/80 border border-blue-400/40 rounded-lg text-[11px] text-blue-100 font-medium select-none shadow-xs">
+                              <Pin className="w-3 h-3 text-blue-200 flex-shrink-0" />
+                              <span>
+                                引用元素: <code className="font-mono bg-blue-800/90 px-1 py-0.5 rounded text-blue-100 font-semibold">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
+                              </span>
+                              {refElem.screenName && (
+                                <span className="text-blue-200/80 text-[10px]">(@{refElem.screenName})</span>
+                              )}
+                            </div>
+                          ) : m.referencedScreen ? (
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-700/80 border border-blue-400/40 rounded-lg text-[11px] text-blue-100 font-medium select-none shadow-xs">
+                              <AtSign className="w-3 h-3 text-blue-200 flex-shrink-0" />
+                              <span>引用画框: <span className="font-semibold text-white">@{m.referencedScreen.name}</span></span>
+                            </div>
+                          ) : null}
+
+                          {/* 附件图片缩略图，点击可放大 */}
+                          {m.imageUrl && (
+                            <div
+                              onClick={() => setPreviewImageUrl(m.imageUrl!)}
+                              className="relative group cursor-pointer overflow-hidden rounded-lg border border-blue-400/40 max-w-[210px] max-h-[140px] bg-blue-950/50 shadow-xs hover:border-blue-300 transition"
+                              title="点击放大查看原图"
+                            >
+                              <img
+                                src={m.imageUrl}
+                                alt="附件参考图"
+                                className="w-full h-auto max-h-[140px] object-cover transition duration-200 group-hover:scale-105"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-[11px] text-white font-medium backdrop-blur-[1px]">
+                                <ZoomIn className="w-3.5 h-3.5" />
+                                <span>点击放大</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="text-sm leading-relaxed text-white select-text">{displayPrompt}</div>
+                        </div>
+                      );
+                    })()
                   ) : m.isStopped ? (
                     <div className="flex items-center gap-1.5 text-amber-300 text-xs">
                       <Square className="w-3.5 h-3.5 flex-shrink-0 fill-current" />
@@ -504,21 +986,35 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         (m.screenId && screens[m.screenId] ? m.screenId : undefined) ||
                         Object.keys(screens).find((sid) => screens[sid]?.htmlContent === m.htmlOutput);
                       const isMounted = Boolean(mountedScreenId);
+                      const isModified = m.toolAction === 'modified' || m.toolAction === 'patched';
+                      const displayTitle = m.screenName || (mountedScreenId ? screens[mountedScreenId]?.name : '画框');
 
                       return (
                         <div className="space-y-2">
                           {isMounted ? (
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>设计画框已挂载至画板</span>
-                              </div>
+                              {isModified ? (
+                                <div className="flex items-center gap-1.5 text-blue-400 font-medium text-[11px]">
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                  <span>已更新画框「{displayTitle}」</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>设计画框已挂载至画板</span>
+                                </div>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => setActiveScreen(mountedScreenId!)}
-                                className="text-[10px] px-2 py-0.5 bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 rounded transition cursor-pointer"
+                                onClick={() => panToScreen(mountedScreenId!)}
+                                className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition cursor-pointer ${
+                                  isModified
+                                    ? 'bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 border border-blue-700/50'
+                                    : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50'
+                                }`}
                               >
-                                定位画框
+                                <span>定位画框</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
                               </button>
                             </div>
                           ) : (
@@ -537,8 +1033,66 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               </button>
                             </div>
                           )}
-                          <div className="text-[10px] text-slate-400 font-mono bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                            结构规格: {settings.frameWidth}px 宽 · {m.htmlOutput.length} 字符 · 遵循 Design Tokens
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                            <span>规格: {settings.frameWidth}px · {m.htmlOutput.length} 字符</span>
+                            {mountedScreenId && (
+                              <span className={isModified ? 'text-blue-400/90' : 'text-emerald-400/80'}>
+                                {isModified ? '已就绪 (内容已覆盖更新)' : '已在画板就绪'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : m.text && m.text.includes('<artifact') ? (
+                    (() => {
+                      const artifactRegex = /<artifact(?:\s+([^>]*))?>([\s\S]*?)(?:<\/artifact>|$)/i;
+                      const match = m.text.match(artifactRegex);
+                      const attrStr = match ? match[1] || '' : '';
+                      const titleMatch = attrStr.match(/title=["']([^"']+)["']/i);
+                      const title = titleMatch ? titleMatch[1] : (m.screenName || '页面设计代码');
+                      const codeSnippet = match ? match[2].trim() : '';
+                      const preText = m.text.slice(0, match ? match.index : undefined).trim();
+                      const isCodeExpanded = Boolean(expandedCodeIds[m.id]);
+                      const targetScreen = m.screenId ? screens[m.screenId] : activeScreenId ? screens[activeScreenId] : null;
+
+                      return (
+                        <div className="space-y-2">
+                          {preText && <div className="text-slate-300 text-xs">{preText}</div>}
+                          <div className="p-2.5 bg-slate-950/90 border border-slate-700/80 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <FileCode className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                                <span className="font-medium text-slate-200 text-xs truncate" title={title}>
+                                  {title}
+                                </span>
+                              </div>
+                              {targetScreen && (
+                                <button
+                                  type="button"
+                                  onClick={() => panToScreen(targetScreen.id)}
+                                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 rounded transition"
+                                >
+                                  <span>定位画框</span>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800">
+                              <span>{settings.frameWidth}px 规格 · {codeSnippet.length} 字符</span>
+                              <button
+                                type="button"
+                                onClick={() => toggleCodeExpand(m.id)}
+                                className="text-blue-400 hover:text-blue-300 transition cursor-pointer"
+                              >
+                                {isCodeExpanded ? '收起代码' : '查看代码'}
+                              </button>
+                            </div>
+                            {isCodeExpanded && (
+                              <pre className="max-h-48 overflow-y-auto p-2 bg-slate-900 rounded-lg text-[10px] font-mono text-slate-300 whitespace-pre overflow-x-auto select-text border border-slate-800">
+                                {codeSnippet}
+                              </pre>
+                            )}
                           </div>
                         </div>
                       );
@@ -567,7 +1121,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           {isRuleF && onOpenSettings && (
                             <div className="pt-1">
                               <button
-                                onClick={onOpenSettings}
+                                onClick={() => onOpenSettings?.('provider')}
                                 className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg text-[10px] transition shadow"
                               >
                                 打开模型设置开启权限
@@ -577,18 +1131,72 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         </div>
                       );
                     })()
+                  ) : m.isError || m.text?.startsWith('生成失败:') || m.text?.startsWith('请求异常:') ? (
+                    <div className="space-y-2.5 p-2 bg-red-950/40 border border-red-800/60 rounded-xl text-red-200">
+                      <div className="flex items-center gap-1.5 font-semibold text-xs text-red-400">
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>操作未成功完成</span>
+                      </div>
+                      <div className="text-[11px] text-red-300/90 whitespace-pre-wrap leading-relaxed">
+                        {m.text}
+                      </div>
+                      {m.text.includes('读取流数据异常') && (
+                        <div className="text-[10px] text-red-400/80 bg-red-950/60 p-1.5 rounded border border-red-900/60">
+                          💡 提示：模型响应时间较长或网络连接中断。已为您调整长连接保护，可直接重试。
+                        </div>
+                      )}
+                      {!isCurrentGenerating && (
+                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-red-900/40">
+                          <button
+                            type="button"
+                            onClick={() => engine.retryTurn(m.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[11px] font-medium transition cursor-pointer shadow-sm"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            <span>直接重试</span>
+                          </button>
+                          {m.preActionSnapshot && (
+                            <button
+                              type="button"
+                              onClick={() => engine.rollbackAndRetryTurn(m.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
+                              title={`回退「${m.preActionSnapshot.screenName}」至修改前版本并重新执行`}
+                            >
+                              <Undo2 className="w-3 h-3 text-amber-400" />
+                              <span>回退修改前版本并重新操作</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       <div className="text-slate-300 text-xs whitespace-pre-wrap">{m.text}</div>
-                      {!isCurrentGenerating && (
+                      {m.structureDiff ? (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => engine.forceApply(m.htmlOutput)}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer shadow"
+                            title="放行并直接合入本次生成的页面或元素修改"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>强制放行并应用修改</span>
+                          </button>
+                        </div>
+                      ) : !isCurrentGenerating && (
                         <button
                           type="button"
                           onClick={() => {
-                            const prevUserPrompt =
+                            let prevUserPrompt =
                               engine.messages
                                 .slice(0, engine.messages.findIndex((item) => item.id === m.id))
                                 .reverse()
                                 .find((item) => item.sender === 'user')?.text || '';
+                            // 消除递归嵌套包装
+                            prevUserPrompt = prevUserPrompt
+                              .replace(/^请针对之前的页面设计诉求：“([\s\S]*?)”，直接且仅输出.*$/, '$1')
+                              .trim();
                             handleSendMessage(
                               prevUserPrompt
                                 ? `请针对之前的页面设计诉求：“${prevUserPrompt}”，直接且仅输出被 <artifact identifier="screen_new" type="screen" title="新页面设计"> 与 </artifact> 包裹的完整页面代码块，严禁输出任何多余解释`
@@ -598,7 +1206,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           className="mt-1 px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>一键强制生成页面 HTML</span>
+                          <span>一键生成完整页面 HTML</span>
                         </button>
                       )}
                     </div>
@@ -606,22 +1214,67 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </div>
               )}
 
-              {m.checkpointId && (
-                <div className="flex items-center gap-2 pt-1 pl-1">
+              <div className="flex flex-wrap items-center gap-3 pt-1 pl-1 text-[11px] text-slate-400">
+                {m.checkpointId && (
                   <button
                     onClick={() => alert(`已锁定 Checkpoint [${m.checkpointId}]，可在历史记录中安全撤回。`)}
-                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-blue-400 transition"
+                    className="flex items-center gap-1 hover:text-blue-400 transition cursor-pointer"
                     title="回到生成前状态"
                   >
                     <RotateCcw className="w-3 h-3" />
                     <span>回到这里 (快照)</span>
                   </button>
+                )}
+                {m.preActionSnapshot && !isCurrentGenerating && !m.isError && (
+                  <button
+                    onClick={() => engine.rollbackAndRetryTurn(m.id)}
+                    className="flex items-center gap-1 hover:text-amber-400 transition cursor-pointer"
+                    title={`回退「${m.preActionSnapshot.screenName}」至本次生成前的原始版本并重新生成`}
+                  >
+                    <Undo2 className="w-3 h-3" />
+                    <span>回退原版并重新调整</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Single Message Token Usage */}
+              {m.usage && m.sender === 'assistant' && (
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono pl-1 pt-0.5">
+                  <Zap className="w-2.5 h-2.5 text-amber-400/80" />
+                  <span>{m.usage.totalTokens.toLocaleString()} tokens</span>
+                  <span className="text-slate-600">({m.usage.promptTokens.toLocaleString()} in / {m.usage.completionTokens.toLocaleString()} out)</span>
+                  {m.elapsedSeconds && (
+                    <>
+                      <span className="text-slate-700">·</span>
+                      <span>{m.elapsedSeconds}s</span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
+        {/* 自动滚动锚点 */}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* 浮动按钮：最新内容 */}
+      {!isAtBottom && (
+        <button
+          type="button"
+          data-testid="scroll-to-bottom-btn"
+          onClick={() => scrollToBottom('smooth')}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-slate-850/95 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700/80 rounded-full shadow-lg backdrop-blur-sm text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer group select-none"
+          title="滚动到最新内容"
+        >
+          {engine.isGenerating && (
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping flex-shrink-0" />
+          )}
+          <ArrowDown className="w-3.5 h-3.5 text-blue-400 group-hover:translate-y-0.5 transition-transform" />
+          <span>最新内容</span>
+        </button>
+      )}
+    </div>
 
       {/* Mention Auto-complete Menu (PRD D18 / §3.2.7) */}
       {showMentionMenu && (
@@ -643,22 +1296,112 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         </div>
       )}
 
-      {/* Prompt Templates */}
-      <div className="p-2 border-t border-slate-800 bg-slate-900/50 flex flex-wrap gap-1.5">
-        {promptTemplates.map((tpl, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleSendMessage(tpl)}
-            disabled={engine.isGenerating}
-            className="text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 rounded-full border border-slate-700/60 transition"
-          >
-            {tpl}
-          </button>
-        ))}
-      </div>
+      {/* 上下文引用控制栏（卡片/按钮双态：启用 / 非启用）*/}
+      {(activeScreen || selectedNode) && (
+        <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/60 flex items-center flex-wrap gap-2">
+          <span className="text-[10px] text-slate-500 mr-0.5 flex-shrink-0">引用</span>
+          {activeScreen && (
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition select-none ${
+                isPageReferenced
+                  ? 'bg-blue-600/20 border-blue-500/80 text-blue-300 shadow-sm shadow-blue-500/10'
+                  : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/70 hover:border-slate-600 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={handleTogglePageRef}
+                disabled={engine.isGenerating}
+                className="flex items-center gap-1.5 transition disabled:opacity-40"
+                title={
+                  isPageReferenced
+                    ? `已引用「${activeScreen.name}」，AI 将基于该画框进行修改（点击可停用）`
+                    : `未引用「${activeScreen.name}」，点击启用引用后 AI 将针对该画框修改`
+                }
+              >
+                {isPageReferenced ? (
+                  <Check className="w-3 h-3 text-blue-400" />
+                ) : (
+                  <AtSign className="w-3 h-3 text-slate-500" />
+                )}
+                <span className="truncate max-w-[100px] font-medium">{activeScreen.name}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded transition ${
+                    isPageReferenced
+                      ? 'bg-blue-500/30 text-blue-200 font-semibold border border-blue-400/40'
+                      : 'bg-slate-800 text-slate-500 border border-slate-700/60'
+                  }`}
+                >
+                  {isPageReferenced ? '已启用' : '未启用'}
+                </span>
+              </button>
+              {isPageReferenced && (
+                <button
+                  type="button"
+                  onClick={() => setIsPageReferenced(false)}
+                  disabled={engine.isGenerating}
+                  className="p-0.5 text-blue-400/60 hover:text-blue-100 hover:bg-blue-500/20 rounded transition"
+                  title="停用页面引用"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {selectedNode && activeScreen && (
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition select-none ${
+                isElementReferenced
+                  ? 'bg-indigo-600/20 border-indigo-500/80 text-indigo-300 shadow-sm shadow-indigo-500/10'
+                  : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/70 hover:border-slate-600 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={handleToggleElementRef}
+                disabled={engine.isGenerating}
+                className="flex items-center gap-1.5 transition disabled:opacity-40"
+                title={
+                  isElementReferenced
+                    ? `已引用元素 <${selectedNode.tagName}> (nid: ${selectedNode.nid})，点击可停用`
+                    : `未引用元素 <${selectedNode.tagName}>，点击启用后将精准定位修改该元素`
+                }
+              >
+                {isElementReferenced ? (
+                  <Check className="w-3 h-3 text-indigo-400" />
+                ) : (
+                  <Pin className="w-3 h-3 text-slate-500" />
+                )}
+                <span className="font-mono">{'<'}{selectedNode.tagName}{'>'}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded transition ${
+                    isElementReferenced
+                      ? 'bg-indigo-500/30 text-indigo-200 font-semibold border border-indigo-400/40'
+                      : 'bg-slate-800 text-slate-500 border border-slate-700/60'
+                  }`}
+                >
+                  {isElementReferenced ? '已启用' : '未启用'}
+                </span>
+              </button>
+              {isElementReferenced && (
+                <button
+                  type="button"
+                  onClick={handleDisableElementRef}
+                  disabled={engine.isGenerating}
+                  className="p-0.5 text-indigo-400/60 hover:text-indigo-100 hover:bg-indigo-500/20 rounded transition"
+                  title="停用元素引用"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Input Form */}
-      <div className="p-3 border-t border-slate-800 bg-slate-900">
+      <div className="p-3 border-t border-slate-800 bg-slate-900" onPaste={handlePaste}>
         <input
           type="file"
           ref={fileInputRef}
@@ -680,50 +1423,121 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         />
 
         {attachedImage && (
-          <div className="flex items-center gap-2 p-1.5 px-2.5 bg-slate-950 border border-blue-900/60 rounded-xl text-[11px] text-slate-300 mb-2">
-            <img
-              src={attachedImage.dataUrl}
-              alt="Ref"
-              className="w-7 h-7 object-cover rounded-md border border-slate-700"
-            />
-            <span className="truncate flex-1 font-medium text-blue-300">
-              参考设计图: {attachedImage.name} (Vision 就绪)
-            </span>
+          <div className="space-y-1 mb-2">
+            <div
+              className={`flex items-center gap-2 p-1.5 px-2.5 bg-slate-950 border rounded-xl text-[11px] text-slate-300 ${
+                codeSupportsVision || visionReady ? 'border-blue-900/60' : 'border-amber-700/60 bg-amber-950/20'
+              }`}
+            >
+              <img
+                src={attachedImage.dataUrl}
+                alt="Ref"
+                className="w-7 h-7 object-cover rounded-md border border-slate-700 flex-shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <span className="truncate block font-medium text-blue-300">
+                  {attachedImage.name}
+                </span>
+                <span className="text-[10px] text-slate-400 truncate block">
+                  {codeSupportsVision
+                    ? `主力模型 [${activeCodeProv?.name || 'Code'}] 原生识图`
+                    : visionReady
+                    ? `将由 Vision 档 [${activeVisionProv?.name || 'Gemini'}] 识别`
+                    : `⚠️ 主力为纯文本，且 Vision 档未配 Key`}
+                </span>
+              </div>
+              <button
+                onClick={() => setAttachedImage(null)}
+                disabled={engine.isGenerating}
+                className="text-slate-400 hover:text-slate-200 p-0.5 disabled:opacity-40 flex-shrink-0"
+                title="移除参考图"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {!codeSupportsVision && !visionReady && (
+              <div className="p-2 bg-amber-950/40 border border-amber-800/40 rounded-xl text-[10px] text-amber-300/90 leading-relaxed flex items-start gap-1.5">
+                <span className="flex-shrink-0">⚠️</span>
+                <span>
+                  当前主力【{activeCodeProv?.name || 'DeepSeek'}】不支持图片。请点击
+                  <button
+                    type="button"
+                    onClick={() => onOpenSettings?.('provider')}
+                    className="underline text-amber-200 mx-1 font-medium hover:text-white"
+                  >
+                    Provider 配置
+                  </button>
+                  为 Vision 档配置 Key，或移除图片仅发送文字。
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 元素引用 Chip（Add to Chat 功能 - spec: element-add-to-chat） */}
+        {pendingNodeRef && (
+          <div className="flex items-center gap-1.5 mb-2 p-2 bg-blue-950/40 border border-blue-500/40 border-dashed rounded-xl">
+            <Pin className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-[11px] text-blue-300 font-medium">
+                {'<'}{pendingNodeRef.tagName}{'>'}&nbsp;
+                <span className="text-blue-400/70">@&nbsp;{pendingNodeRef.screenName}</span>
+              </span>
+              <span className="block text-[10px] text-blue-400/50 font-mono truncate">
+                nid: {pendingNodeRef.nid}
+              </span>
+            </div>
             <button
-              onClick={() => setAttachedImage(null)}
-              disabled={engine.isGenerating}
-              className="text-slate-400 hover:text-slate-200 p-0.5 disabled:opacity-40"
+              type="button"
+              onClick={() => clearPendingNodeRef()}
+              className="p-0.5 text-blue-400/60 hover:text-blue-200 transition flex-shrink-0"
+              title="取消引用"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
 
-        {/* 风格标签 (T-AE-21) —— 仅影响本轮请求，不写入工程 */}
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {STYLE_TAGS.map((tag) => {
-            const on = activeTags.includes(tag.id);
-            return (
+        {/* 快捷输入 (Quick Prompts) —— 点击快速插入到输入框（不提交）*/}
+        <div className="mb-2">
+          {/* Header row: title and settings config button */}
+          <div className="flex items-center justify-between pb-1 text-[10px] text-slate-400 font-medium">
+            <div className="flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>快捷输入</span>
+              <span className="text-[9px] text-slate-500 font-normal">（点击快速插入）</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenSettings?.('quick_prompts')}
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-blue-300 hover:bg-slate-800 rounded border border-dashed border-slate-700 hover:border-blue-500/50 transition"
+              title="自定义与配置快捷输入"
+            >
+              <Settings className="w-2.5 h-2.5" />
+              <span>配置</span>
+            </button>
+          </div>
+
+          {/* Multi-row chips container: wrap enabled, max-height 4 rows (~118px), vertical scroll only, no horizontal scroll */}
+          <div
+            data-testid="quick-prompts-container"
+            className="flex flex-wrap items-center gap-1.5 overflow-y-auto overflow-x-hidden max-h-[118px] py-0.5 pr-0.5"
+          >
+            {allQuickPrompts.map((item) => (
               <button
-                key={tag.id}
+                key={item.id}
                 type="button"
-                onClick={() =>
-                  setActiveTags((prev) => (on ? prev.filter((t) => t !== tag.id) : [...prev, tag.id]))
-                }
-                title="仅作用于本轮请求，不会修改工程设计系统"
-                className={`px-2 py-0.5 rounded-lg text-[10px] border transition ${
-                  on
-                    ? 'border-blue-500 bg-blue-950/50 text-blue-300'
-                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
-                }`}
+                onClick={() => handleInsertQuickPrompt(item.content)}
+                title={`${item.content}\n[点击快速插入，不自动提交] · ${item.scope === 'project' ? '当前工程' : '全局通用'}`}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border transition bg-slate-800/80 hover:bg-slate-800 border-slate-700/70 hover:border-slate-500 text-slate-300 hover:text-white"
               >
-                {tag.label}
+                <span>{item.title}</span>
+                {item.scope === 'project' && (
+                  <span className="text-[9px] px-1 py-0.2 bg-blue-500/20 text-blue-300 rounded font-mono">项目</span>
+                )}
               </button>
-            );
-          })}
-          {activeTags.length > 0 && (
-            <span className="text-[10px] text-slate-500 self-center ml-0.5">仅本轮生效</span>
-          )}
+            ))}
+          </div>
         </div>
 
         <div className="relative flex items-center gap-1.5">
@@ -732,14 +1546,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             onClick={() => fileInputRef.current?.click()}
             disabled={engine.isGenerating}
             className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 disabled:opacity-40 rounded-xl transition"
-            title="上传参考设计图/UI截图 (Vision 反推设计)"
+            title="上传参考设计图/UI截图，或直接按 Cmd+V / Ctrl+V 粘贴截图 (Vision 反推设计)"
           >
             <ImageIcon className="w-4 h-4" />
           </button>
 
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => handleInputChange(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -753,7 +1569,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             placeholder={
               engine.isGenerating
                 ? 'AI 正在生成中，点击右侧按钮可立即停止...'
-                : '输入设计诉求，或上传参考图让 AI 反推设计...'
+                : '输入设计诉求，可上传或按 Cmd+V / Ctrl+V 粘贴剪切板截图...'
             }
             rows={2}
             className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-20 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
@@ -787,6 +1603,53 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           )}
         </div>
       </div>
+
+      {/* 附件大图全屏预览弹窗 (Lightbox Modal) */}
+      {previewImageUrl && (
+        <div
+          data-testid="image-lightbox-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150 select-none"
+          onClick={() => setPreviewImageUrl(null)}
+        >
+          {/* Close button */}
+          <button
+            type="button"
+            data-testid="close-lightbox-btn"
+            onClick={() => setPreviewImageUrl(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shadow-lg cursor-pointer z-10"
+            title="关闭预览 (Esc)"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Enlarge image container */}
+          <div
+            className="relative max-w-[90vw] max-h-[88vh] flex flex-col items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewImageUrl}
+              alt="附件高清大图预览"
+              data-testid="lightbox-preview-img"
+              className="max-w-full max-h-[82vh] object-contain rounded-xl border border-slate-700 shadow-2xl bg-slate-950"
+            />
+            <div className="mt-2.5 px-3 py-1 bg-slate-900/90 border border-slate-800 rounded-full text-xs text-slate-400 flex items-center gap-2 shadow">
+              <span>附件参考图预览</span>
+              <span className="text-slate-600">·</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const w = window.open('');
+                  w?.document.write(`<body style="margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;"><img src="${previewImageUrl}" style="max-width:100%;max-height:100%;" /></body>`);
+                }}
+                className="text-blue-400 hover:underline cursor-pointer"
+              >
+                在新标签打开
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

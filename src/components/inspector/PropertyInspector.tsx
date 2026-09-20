@@ -4,8 +4,11 @@ import { useAIConfigStore } from '../../stores/useAIConfigStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { AIService } from '../../services/ai/aiService';
 import { NidEngine } from '../../utils/nidEngine';
-import { TokenLintEngine } from '../../utils/tokenLint';
+import { TokenLintEngine, computeScreenAuditReport } from '../../utils/tokenLint';
 import { setTextByNid, uneditableHint } from '../../utils/textNode';
+import { duplicateElementByNid, wrapElementByNid } from '../../utils/domPatcher';
+import { LayoutInspector } from './LayoutInspector';
+import { BoxModelInspector } from './BoxModelInspector';
 import {
   AlertTriangle,
   ArrowDown,
@@ -24,22 +27,40 @@ import {
   Wand2
 } from 'lucide-react';
 
+const formatBreadcrumbClass = (rawCls: unknown): string => {
+  if (typeof rawCls === 'string') {
+    const trimmed = rawCls.trim();
+    if (!trimmed) return '';
+    return '.' + trimmed.split(/\s+/).slice(0, 2).join('.');
+  }
+  if (rawCls && typeof rawCls === 'object' && 'baseVal' in rawCls) {
+    const base = String((rawCls as any).baseVal || '').trim();
+    if (!base) return '';
+    return '.' + base.split(/\s+/).slice(0, 2).join('.');
+  }
+  return '';
+};
+
 export const PropertyInspector: React.FC = () => {
   const {
     activeScreenId,
     selectedNid,
     selectedNode,
     screens,
+    settings,
     overrides,
     designSystem,
     components,
     setOverride,
+    clearNodeOverrides,
     selectNode,
     updateScreenHtml,
+    deleteNode,
     extractComponentFromNode,
     detachComponentInstance,
     syncComponentInstances,
-    selectNodeByNid
+    selectNodeByNid,
+    postAuditReport
   } = useProjectStore();
 
   const { getActiveProviderForRole } = useAIConfigStore();
@@ -93,20 +114,23 @@ export const PropertyInspector: React.FC = () => {
                 style={{ width: `${lint.complianceRate}%` }}
               />
             </div>
-            {lint.issues.length > 0 && (
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] text-slate-400 block">检测到 {lint.issues.length} 处风格逃逸</span>
-                <button
-                  onClick={() => {
-                    const fixed = TokenLintEngine.autoFix(curScreen.htmlContent);
-                    updateScreenHtml(curScreen.id, fixed, '一键修复 Token 风格逃逸');
-                  }}
-                  className="w-full py-1 px-2 bg-blue-600/80 hover:bg-blue-600 text-white rounded text-[11px] font-medium transition"
-                >
-                  一键映射修复为标准 Token
-                </button>
-              </div>
-            )}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] text-slate-400 block">
+                {lint.issues.length > 0 ? `检测到 ${lint.issues.length} 处风格逃逸` : '未检测到风格逃逸，规范度达标'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const report = computeScreenAuditReport(curScreen, designSystem, settings.deviceProfile);
+                  postAuditReport(report);
+                }}
+                className="w-full py-1.5 px-2 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99]"
+                title="一键评测当前页面规范逃逸点并输出到对话列表（不修改原代码）"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>一键评测</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -194,35 +218,27 @@ Requirements:
     }
   };
 
-  // --- Structural Operations (T-P2-07 / PRD §3.6.3) ---
+  // --- Structural Operations (T-P2-07 / PRD §3.6.3 / ISSUE-021) ---
   const handleDuplicateNode = () => {
-    const targetRegex = new RegExp(`(<([a-zA-Z0-9-]+)[^>]*data-nid=["']${selectedNid}["'][^>]*>[\\s\\S]*?<\\/\\2>)`, 'i');
-    const match = currentScreen.htmlContent.match(targetRegex);
-    if (!match) return;
-    const original = match[1];
-    // Strip nid and re-inject new nid
-    const clean = original.replace(/\s*data-nid=["'][^"']+["']/, '');
-    const injected = clean.replace(/<([a-zA-Z0-9-]+)/, `<$1 data-nid="${NidEngine.generateNid()}"`);
-    const newHtml = currentScreen.htmlContent.replace(original, `${original}\n${injected}`);
-    updateScreenHtml(activeScreenId, newHtml, `复制元素: #${selectedNid}`);
+    const res = duplicateElementByNid(currentScreen.htmlContent, selectedNid);
+    if (!res.success) return;
+    updateScreenHtml(activeScreenId, res.html, `复制元素: #${selectedNid}`);
+    if (res.newNid) {
+      selectNodeByNid(activeScreenId, res.newNid);
+    }
   };
 
   const handleDeleteNode = () => {
-    const targetRegex = new RegExp(`(<([a-zA-Z0-9-]+)[^>]*data-nid=["']${selectedNid}["'][^>]*>[\\s\\S]*?<\\/\\2>)`, 'i');
-    const newHtml = currentScreen.htmlContent.replace(targetRegex, '');
-    updateScreenHtml(activeScreenId, newHtml, `删除元素: #${selectedNid}`);
-    selectNode(null);
+    deleteNode(activeScreenId, selectedNid);
   };
 
   const handleWrapInContainer = (containerType: 'row' | 'col' | 'card') => {
-    const targetRegex = new RegExp(`(<([a-zA-Z0-9-]+)[^>]*data-nid=["']${selectedNid}["'][^>]*>[\\s\\S]*?<\\/\\2>)`, 'i');
-    const match = currentScreen.htmlContent.match(targetRegex);
-    if (!match) return;
-    const original = match[1];
-    const newContainerNid = NidEngine.generateNid();
-    const wrapped = `<div data-nid="${newContainerNid}" class="${containerType} gap-3 p-4 r-md">\n${original}\n</div>`;
-    const newHtml = currentScreen.htmlContent.replace(original, wrapped);
-    updateScreenHtml(activeScreenId, newHtml, `包裹为 ${containerType}: #${selectedNid}`);
+    const res = wrapElementByNid(currentScreen.htmlContent, selectedNid, containerType);
+    if (!res.success) return;
+    updateScreenHtml(activeScreenId, res.html, `包裹为 ${containerType}: #${selectedNid}`);
+    if (res.containerNid) {
+      selectNodeByNid(activeScreenId, res.containerNid);
+    }
   };
 
   const handleExtractComponent = () => {
@@ -260,7 +276,7 @@ Requirements:
               <button
                 onClick={() => selectNodeByNid(activeScreenId, p.nid)}
                 className="hover:text-blue-400 hover:underline transition truncate max-w-[60px]"
-                title={`${p.tagName}${p.className ? '.' + p.className.split(' ').slice(0, 2).join('.') : ''}`}
+                title={`${p.tagName}${formatBreadcrumbClass(p.className)}`}
               >
                 {p.tagName}
               </button>
@@ -271,7 +287,7 @@ Requirements:
           <span className="text-slate-500 font-mono text-[10px]">#{selectedNid}</span>
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-400">
-          <span>尺寸: {selectedNode.computedBox.width} × {selectedNode.computedBox.height}px</span>
+          <span>尺寸: {selectedNode.computedBox?.width ?? 0} × {selectedNode.computedBox?.height ?? 0}px</span>
           {currentOverride.escaped && (
             <span className="flex items-center gap-1 text-amber-400 bg-amber-950/60 border border-amber-800/40 px-1.5 py-0.5 rounded text-[10px]">
               <AlertTriangle className="w-3 h-3" />
@@ -427,6 +443,20 @@ Requirements:
           </div>
         </div>
 
+        {/* Layout & Alignment (PRD §3.6.1) */}
+        <LayoutInspector
+          computedLayout={selectedNode.computedLayout}
+          declarations={decs}
+          onStyleChange={handleStyleChange}
+        />
+
+        {/* Box Model & Spacing (PRD §3.6.1) */}
+        <BoxModelInspector
+          computedBox={selectedNode.computedBox}
+          declarations={decs}
+          onStyleChange={handleStyleChange}
+        />
+
         {/* Text Content —— 常驻渲染：字段时有时无会让用户以为功能损坏 (ISSUE-002) */}
         {(() => {
           const editable = selectedNode.textEditable !== false;
@@ -538,7 +568,7 @@ Requirements:
           <div className="pt-2 border-t border-slate-800">
             <button
               onClick={() => {
-                useProjectStore.getState().setOverride(activeScreenId, selectedNid, {}, false, '清除手动样式覆盖');
+                clearNodeOverrides(activeScreenId, selectedNid);
               }}
               className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs transition"
             >

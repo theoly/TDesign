@@ -128,7 +128,7 @@ describe('M1 验收 · 工程管理页与工作空间外壳', () => {
     expect(useWorkspaceStore.getState().view).toBe('manager');
     expect(text()).toContain('未命名工程');
     expect(text()).toContain('PC 1440');
-    expect(text()).toContain('1 个页面');
+    expect(text()).toContain('0 个页面');
 
     // 注册表确有该工程
     expect(listProjects().map((p) => p.id)).toContain(projectId);
@@ -171,6 +171,9 @@ describe('画框顶栏拖动 (PRD §3.3.2)', () => {
     render();
     click(findButton('新建第一个工程'));
     click(findButton('创建并进入'));
+    if (useProjectStore.getState().screenOrder.length === 0) {
+      useProjectStore.getState().addBlankScreen();
+    }
   };
 
   const drag = (el: HTMLElement, dx: number, dy: number) => {
@@ -297,6 +300,9 @@ describe('ISSUE-001～004 验收 · 检查器文本字段', () => {
     render();
     click(findButton('新建第一个工程'));
     click(findButton('创建并进入'));
+    if (useProjectStore.getState().screenOrder.length === 0) {
+      useProjectStore.getState().addBlankScreen();
+    }
   };
 
   test('ISSUE-001：连续切换选中元素，文本框始终显示当前元素的文本', () => {

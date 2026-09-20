@@ -161,6 +161,17 @@ body {
 .bg-warning-light { background-color: var(--color-warning-light, #fef3c7); color: var(--color-warning, #d97706); }
 .bg-danger-light { background-color: var(--color-danger-light, #fee2e2); color: var(--color-danger, #dc2626); }
 
+/* 氛围渐变背景：依托 Token 变量提供轻质感环境色，适配移动端登录/欢迎/品牌 Hero 背景 */
+.bg-gradient-soft {
+  background: linear-gradient(180deg, var(--color-surface-alt, #f8fafc) 0%, var(--color-surface, #ffffff) 100%);
+}
+.bg-ambient-warm {
+  background: linear-gradient(180deg, var(--color-warning-light, #fef3c7) 0%, var(--color-surface, #ffffff) 100%);
+}
+.bg-ambient-cool {
+  background: linear-gradient(180deg, var(--color-primary-light, #dbeafe) 0%, var(--color-surface, #ffffff) 100%);
+}
+
 .border { border: 1px solid var(--color-border, #e2e8f0); }
 .border-b { border-bottom: 1px solid var(--color-border, #e2e8f0); }
 .border-t { border-top: 1px solid var(--color-border, #e2e8f0); }
@@ -171,6 +182,16 @@ body {
   height: 1px;
   background-color: var(--color-border, #e2e8f0);
   margin: var(--space-3, 12px) 0;
+}
+
+.divider-v {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background-color: var(--color-border, #e2e8f0);
+  margin: 0 var(--space-2, 8px);
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* 6. Shapes & Radii */
@@ -194,6 +215,16 @@ body {
   border-radius: var(--radius-lg, 12px);
   box-shadow: var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
   overflow: hidden;
+}
+
+.sheet-card {
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-top-left-radius: var(--radius-xl, 16px);
+  border-top-right-radius: var(--radius-xl, 16px);
+  border-bottom-left-radius: var(--radius-none, 0px);
+  border-bottom-right-radius: var(--radius-none, 0px);
+  box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
 .panel {
@@ -303,6 +334,11 @@ body {
 .icon {
   display: inline-block;
   vertical-align: middle;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  flex: none;
   stroke: currentColor;
   fill: none;
 }
@@ -349,12 +385,21 @@ body {
   border: 1px solid var(--color-border, #e2e8f0);
   border-radius: var(--radius-md, 8px);
 }
+.input-group:focus-within {
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 2px var(--color-primary-light, #dbeafe);
+}
 .input-group > .input {
   flex: 1 1 0%;
   padding-left: 0;
   padding-right: 0;
   border: none;
   background: transparent;
+  box-shadow: none;
+}
+.input-group > .input:focus {
+  box-shadow: none;
+  border: none;
 }
 .input-group > .icon {
   color: var(--color-text-secondary, #475569);

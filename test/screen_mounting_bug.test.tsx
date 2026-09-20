@@ -67,7 +67,10 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     root = createRoot(container);
   });
 
+  const originalStream = AIService.stream;
+
   afterEach(() => {
+    AIService.stream = originalStream;
     act(() => {
       root.unmount();
     });

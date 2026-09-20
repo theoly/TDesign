@@ -5,6 +5,7 @@ import { AIEngineCore } from './types';
 export * from './types';
 export * from './protocolAdapter';
 export * from './aiEngineCore';
+export * from './multimodalGuard';
 
 export function createAIEngineCore(customTransport?: any): AIEngineCore {
   return new DefaultAIEngineCore(customTransport || createDefaultTransport());

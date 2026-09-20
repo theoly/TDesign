@@ -157,7 +157,7 @@ describe('T-AE-14 · 样张页生命周期', () => {
   test('新建工程首个画框是样张页且带 specimen 标记', async () => {
     const { useProjectStore } = await import('../src/stores/useProjectStore');
     const { techBlueTheme: theme } = await import('../src/utils/themePresets');
-    useProjectStore.getState().initNewProject({ name: 'T', deviceProfile: 'pc', designSystem: theme });
+    useProjectStore.getState().initNewProject({ name: 'T', deviceProfile: 'pc', designSystem: theme, createSpecimen: true });
     const st = useProjectStore.getState();
     const first = st.screens[st.screenOrder[0]];
     expect(first.metadata?.kind).toBe('specimen');
@@ -170,7 +170,7 @@ describe('T-AE-14 · 样张页生命周期', () => {
   test('样张页按工程设备档位生成', async () => {
     const { useProjectStore } = await import('../src/stores/useProjectStore');
     const { techBlueTheme: theme } = await import('../src/utils/themePresets');
-    useProjectStore.getState().initNewProject({ name: 'M', deviceProfile: 'mobile', designSystem: theme });
+    useProjectStore.getState().initNewProject({ name: 'M', deviceProfile: 'mobile', designSystem: theme, createSpecimen: true });
     const st = useProjectStore.getState();
     expect(st.screens[st.screenOrder[0]].htmlContent).toContain('tabbar');
   });

@@ -1,216 +1,188 @@
-# AI Designer Studio
+# AI Designer Studio · 智能原型与设计工作台
 
 <p align="center">
-  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="AI Designer Studio Overview" width="860" style="border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.3);" />
+  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="AI Designer Studio Overview" width="920" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.35);" />
 </p>
 
 <p align="center">
-  <strong>面向下一代产品经理、UI/UX 设计师与全栈工程师的 AI 原生（AI-First）智能设计工具</strong>
+  <strong>用自然语言创造专业级交互原型 · 人人皆可使用的 AI 原生高保真设计工具</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-Tauri_2.11_(macOS_/_Win_/_Linux)-blue?logo=tauri" alt="Platform" />
-  <img src="https://img.shields.io/badge/Framework-React_18_%2B_TypeScript-61dafb?logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/Runtime-Bun_%2B_Vite_6-fbf0df?logo=bun" alt="Bun" />
-  <img src="https://img.shields.io/badge/Tests-74_Pass_%2F_0_Fail-brightgreen" alt="Tests" />
-  <img src="https://img.shields.io/badge/Bundle_Size-~8.4MB_App_%2F_3.5MB_DMG-success" alt="Bundle Size" />
+  <img src="https://img.shields.io/badge/运行平台-macOS%20%7C%20Windows%20%7C%20Linux-blue?logo=apple" alt="Platform" />
+  <img src="https://img.shields.io/badge/数据架构-100%25%20本地优先%20(Local--First)-emerald" alt="Local First" />
+  <img src="https://img.shields.io/badge/原型交付-自包含可交互%20HTML%20%2F%20超清长图-indigo" alt="Export" />
+  <img src="https://img.shields.io/badge/模型支持-DeepSeek%20%7C%20OpenAI%20%7C%20Claude%20%7C%20Ollama-orange" alt="Models" />
 </p>
 
 ---
 
-## 📖 产品概述
+## 💡 为什么选择 AI Designer Studio？
 
-**AI Designer Studio** 是一款**单机原生、高度可控、开箱即用**的现代 UI/UX 设计协作与生成工具。
+以往使用 AI 生成界面，常常面临三大痛点：**“毛坯感严重”**（样式简陋难以直接作为正式方案）、**“黑盒不可控”**（稍作修改就会破坏整体页面）以及**“一次性孤岛”**（无法像 Figma 那样在全局画板中纵览与精细微调）。
 
-不同于市面上仅生成单一静态代码预览或难以精确微调的纯对话工具，AI Designer Studio 融合了 **Figma 级别的无限多画框画板** 与 **AI 原生生成能力**，引入 **Design Token 强约束基座**、**精准 DOM 元素级点选检查器**、**组件复用与自动冲突隔离** 以及 **并排式 AI 方案采纳体系**。用户只需自然语言输入需求，即可秒级生成多页面原型，随时可视化精修，并导出高品质干净可运行的 Web 原型。
-
----
-
-## ✨ 核心特性
-
-### 1. 🎨 无限多页面设计画板 (Infinite Canvas)
-- **多页面总览**：支持在同一画板中自由缩放（10%–400%）、空格拖拽平移、迷你导航地图 (Minimap)、快速复位与自适应视野（Fit All）。
-- **设备档位固定约束 (D8)**：工程级统一定义 PC 桌面端 (1440px) 或移动端 (390px)，保证响应式断点与布局语义严谨。
-- **内容自适应撑开 + 首屏视口线 (D13)**：画框高度由 HTML 内容天然撑开，叠加虚线标出设备首屏折线（PC 900px / 移动端 844px），兼顾宏观长图总览与真实视口感知。
-- **顶栏独立拖动与整理排列**：按住画框标题栏即可自由摆放，内置无重叠一键「整理排列 (Auto-Arrange)」。
-
-### 2. 💬 对话式 AI 助手与意图分发
-- **多厂商网关接入**：内置 OpenAI、Anthropic Claude、Google Gemini、DeepSeek 预设，并支持任意 OpenAI 兼容自定义 Base URL（Ollama / vLLM / LocalAI）。
-- **四大能力档位绑定 (Model Roles)**：按职责分别绑定代码生成档、对话推理档、视觉理解档与生图档。
-- **显式上下文提及 (`@` 实体)**：对话中通过 `@页面名`、`@组件名` 精确注入上下文，杜绝幻觉猜测。
-- **AI 变更并排采纳 (D17)**：整页重写不直接覆盖原画框，并排呈现新旧对比，提供 **「采纳新版 (自动备份 Checkpoint)」**、**「两版都留」** 与 **「保留原版」** 三分支。
-
-### 3. 🎯 元素级检查器与微调 (Point & Edit)
-- **精确点选与盒模型标尺**：画框直接监听原生 DOM 事件（无需额外通信跨域桥），显示悬浮虚线、选中高亮框与 Margin/Padding 标尺。
-- **安全文本编辑引擎 (ISSUE-001~004 彻底收敛)**：
-  - 双击行内编辑与属性面板受控联动；
-  - 自动识别并保护嵌套子元素结构，防止容器内容被意外抹平；
-  - 基于 DOMParser 原生解析，杜绝正则替换造成的非法标签损坏。
-- **L4 覆盖层分离**：所有可视化修改写入独立的样式覆盖层（`overrides`），绝不破坏底层基础 HTML。
-
-### 4. 🧩 组件复用与批量同步 (Components)
-- **重复子树结构指纹探测**：自动识别工程内重复出现 ≥3 次的元素并提示提取为公用组件。
-- **内联 + 反向索引模型 (D6)**：各页面保留内联 DOM，兼具可读性与独立渲染能力。
-- **批量同步与冲突跳过 (D12)**：编辑组件定义可一键全量更新所有实例，若某实例存在手动样式覆盖则自动跳过并列出明细，保护用户定制结果。
-
-### 5. 💎 统一设计系统 (Design Tokens) & Token Lint
-- **一键主题推导**：基于主色自动生成 50–900 完整色彩梯度阶梯，支持 Light / Dark 双模式映射。
-- **全画框秒级热更新**：修改 Token 仅热重编译 CSS 变量，无需重绘 HTML 或重发 AI 请求。
-- **Token Lint 严苛闸门**：全量扫描硬编码字面量色值（`#hex`/`rgb`）、非规范圆角及间距，支持一键批量映射修复为 Token CSS 变量。
-- **基座样式表只读查看与 AI 演进 (D15)**：内置标准 Utility 类库，支持通过对话生成基座扩展并审查类级 Diff。
-
-### 6. 🧠 工程记忆与设计决策沉淀 (D18 / D20)
-- 对话中产生的全局性约束（如 *"本工程一律不使用渐变"*）自动捕获为工程级候选决策。
-- 用户确认后沉淀为工程资产，自动注入后续 AI System Prompt。
-- 决策支持停用（保留历史痕迹）而非直接删除。
-
-### 7. 📦 纯净单页自包含交付 (D5 / D14 / D19)
-- **单页自包含 HTML**：双击即可在任何现代浏览器中打开，内联编译后的基座 CSS、L4 覆盖层与当前模式的 Token 变量，**100% 剥离内部 `data-nid` / `data-asset-id` 等开发契约属性**。
-- **高清 PNG 导出**：支持 1x / 2x / 3x 超分辨率，可选完整高度长图或首屏截断。
+**AI Designer Studio** 专为解决这些问题而设计：
+- 🚀 **一句话秒级成页**：输入日常业务语言，AI 即刻根据专业 UI 规范生成具备细腻层次、排版与微质感的高保真原型；
+- 🎨 **Figma 级别的无限多画框画板**：在同一张无限画布上同时构建登录、首页、详情、个人中心等整套完整用户旅程；
+- 🖱️ **所见即所得的可视化点选精修**：看哪不顺眼点哪里，直观调节边距、颜色、对齐与文字，无需手写一行代码；
+- ⚖️ **并排比选，告别无声覆盖**：AI 进行方案调整时自动在右侧生成新旧对照画框，采纳、保留两版或放弃尽由您决定；
+- 🔒 **100% 数据归属您的本地电脑**：所有工程直接保存在您选择的本地文件夹中，隐私安全不出网，永久掌控自己的数字资产。
 
 ---
 
-## 🏗️ 架构与关键技术决策
+## ✨ 核心功能全景
 
-```mermaid
-graph TB
-    subgraph Host["Tauri 2 桌面宿主 (Rust)"]
-        NativeFS["本地文件 IO / 原子保存"]
-        AIAgent["AI 客户端 (跨厂商 SSE 转发)"]
-        Packager["安装镜像 / 原生分发"]
-    end
+### 1. 🎨 无限多画框全景画板 (Infinite Canvas)
+- **多页面全局漫游**：支持在超大画板中任意平移（按住空格拖动或触控板双指滑动）与缩放（10%–400%），宏观把握整个产品业务动线；
+- **设备专属比例标尺**：创建工程时可选 **电脑端 (PC 1440px)** 或 **手机端 (Mobile 390px)**，杜绝错位变形；
+- **首屏折线视口指引**：画框高度随内容自然撑开，同时虚线标出真实设备首屏分界线（电脑 900px / 手机 844px），兼顾长图设计与真实屏幕首屏体验；
+- **智能防重叠与一键整理**：画框拖拽自动避让，点击顶栏「整理画框」可一键将所有页面整齐规范排版。
 
-    subgraph AppShell["React 18 前端工作台"]
-        ProjectMgr["工程管理页 (入口 D21)"]
-        Workspace["工作空间 (活动栏 + 侧边栏 D22)"]
-        CanvasView["无限画板 (Pan/Zoom/Minimap)"]
-        Inspector["可视化属性面板 + 文本引擎"]
-        DSPanel["设计系统与 Token 热编译器"]
-        History["Immer JSON Patch 撤销历史 (200步)"]
-    end
+### 2. 💬 懂设计的 AI 智能对话助手
+- **全主流模型自由接入**：预设支持 DeepSeek（含 R1 深度思考模型）、OpenAI (GPT-4o)、Anthropic Claude、Google Gemini、阿里百炼等，亦支持本地运行的 Ollama / vLLM；
+- **显式页面引用 (`@` 提到)**：在对话框输入 `@` 即可直接引用已有页面（如：“*参考 @登录页 的卡片阴影与配色，生成 @个人中心*”）；
+- **思考过程透明可见**：支持展开与折叠大模型的高阶推理链，生成状态与意图实时指示；
+- **一键置入对话**：在画框中选中任意按钮或卡片，点击「添加到对话」即可精准针对该元素进行专项 AI 调优。
 
-    subgraph Artboards["画框渲染沙箱"]
-        Frame1["iframe srcdoc (LOD 调度)"]
-        Frame2["iframe srcdoc (LOD 调度)"]
-    end
+### 3. ⚖️ 方案并排比选 (Side-by-Side Adoption)
+- 当您让 AI “调整这个页面的风格”或“重新设计布局”时，系统绝不会粗暴覆盖您的现有成果；
+- 新方案将**自动平铺在原画框右侧**供您左右对比；
+- 浮动工具栏提供三大从容决策路径：
+  - **采纳新版**：将修改后的新版本替换原页面，旧版自动打上安全快照，随时支持 `Ctrl+Z` 撤销；
+  - **两版都留**：保留新旧两张画框，便于与团队比对汇报或提供 A/B 方案；
+  - **保留原版**：一键撤回新提案，原画框完好无损。
 
-    Host <--> AppShell
-    AppShell --> Artboards
-```
+### 4. 🎯 可视化属性检查器 (Inspector)
+- **精准点选高亮**：鼠标轻移即展示悬浮框，点击画框内任意元素即可激活检查器面板；
+- **外边距与内边距 (Box Model)**：以专业盒模型图示呈现 Margin 与 Padding，支持纯数字输入、微调步进或 `auto` 居中；
+- **Flex 排版直观调节**：水平/垂直排列、左右对齐、两端对齐、网格间隙 (Gap) 一键切换；
+- **安全行内编辑**：双击画框内的任意文本即可直接敲键盘修改文案（按 Enter 提交，Esc 取消），底层采用安全隔离引擎，绝不损坏原有组件与图标；
+- **结构级联安全删除**：选中容器或组件后按下键盘 `Delete` / `Backspace` 键，即可一键将该容器及其内部所有子孙节点完整干净移除，同步清除多余样式。
 
-- **D1 桌面形态**：选用 Tauri 2 架构，免除浏览器跨域限制，安装包体积仅 ~3.5MB（比传统 Electron 缩减 95%）。
-- **D10 文档模型契约**：基于稳定 `data-nid` 追踪元素，解耦结构层与视觉覆盖层。
-- **D16 扁平 Store**：状态按 ID 扁平寻址，杜绝数组索引错位对撤销栈（JSON Patch）造成的历史失效。
+### 5. 💎 统一设计系统与主题风格 (Design System & Tokens)
+- **4 套工业级精调预设**：开箱即用科技蓝 (Tech Blue)、深冷灰 (Cool Slate)、数字紫 (Digital Violet) 与森林绿 (Forest Green)；
+- **一键切换明暗模式**：随时点击顶栏的「浅色 / 深色」按钮，画框内部所有颜色变量瞬间热重排，生成高保真暗黑模式界面；
+- **Token 合规率检测 (Token Lint)**：实时检测画框内是否存在破坏规范的生硬手写色值，支持一键将游离色值规范化映射回品牌 Token；
+- **工程设计记忆**：对话中达成的约定（如“*本工程所有主卡片必须具备 16px 圆角*”）将沉淀为工程规则，持续指导后续生成。
 
----
+### 6. 🖼️ 工程封面与资源中心 (Cover & Assets)
+- **智能化工程卡片**：工程管理列表自动抓取首个画框的高清首屏作为封面预览，无画框时自动展示优雅字标；
+- **画框一键设为封面**：在画框标题栏选中任意满意页面，点击「设为封面」图标即可将其锁定为该工程的代表性缩略图；
+- **设计资产中心**：便捷插入精美矢量图标、高品质占位图片与预制组件。
 
-## 📂 项目结构
-
-```text
-designer/
-├── src/
-│   ├── components/
-│   │   ├── assets/           # 资源中心面板 (图片、图标、组件、字体)
-│   │   ├── canvas/           # 无限画板、画框容器 (ScreenFrame)、Minimap
-│   │   ├── chat/             # AI 对话助手、流式输出、Prompt 模板
-│   │   ├── export/           # 交付导出面板 (自包含 HTML / 高清 PNG)
-│   │   ├── inspector/        # 检查器 (属性面板、样式覆盖、盒模型标尺)
-│   │   ├── layout/           # 顶栏、活动栏、侧边栏折叠面板 (Accordion)
-│   │   ├── settings/         # AI Provider 设置与能力档位配置
-│   │   ├── theme/            # 主题设计系统可视化调节器
-│   │   └── workspace/        # 工程管理启动页 (ProjectManager)
-│   ├── services/ai/          # AI 服务封装、Prompt 组装器 (PromptBuilder)
-│   ├── stores/               # Zustand 全局 Store (useProjectStore, useHistoryStore 等)
-│   ├── styles/               # Token 基座样式 (base.css)
-│   ├── types/                # 数据模型类型契约 (PRD §4)
-│   └── utils/                # 核心引擎: nidEngine, textNode, cssCompiler, tokenLint...
-├── src-tauri/                # Tauri 2 原生桌面工程 (Cargo.toml, tauri.conf.json)
-├── test/                     # 自动化测试集 (PRD 验收、组件回归、文本安全)
-├── scripts/                  # 桌面打包脚本 (package-desktop.sh)
-├── dist-desktop/             # 桌面分发包输出目录 (.app, .dmg, .zip)
-└── doc/                      # 架构规范、PRD、分期计划、缺陷记录
-    ├── prd.md                # 完整产品需求文档 (PRD v1.1.0)
-    ├── plan-product.md       # 产品研发全阶段交付计划 (Phase 0~3)
-    ├── aesthetic.md          # 美学升级专项工程规范与计划 (A0~A3)
-    └── issues.md             # 关键缺陷排查与修复记录
-```
+### 7. 📦 纯净无损交付与成果导出 (Export)
+- **纯净单页 HTML 导出**：
+  - 一键导出的 HTML 为**自包含单文件**（内嵌所有必需样式与字体声明）；
+  - 双击该 HTML 文件，在任意电脑的 Chrome、Safari 或 Edge 浏览器中都能丝滑打开交互演示；
+  - 导出时已自动剥离所有内部调试契约属性，代码干净规整，工程师可以直接参考或切图开发。
+- **超清 PNG 截图导出**：
+  - 支持 **1x / 2x / 3x** 超分辨率长图导出；
+  - 支持「导出完整滚动长图」或「仅截取设备首屏高度」，直接用于产品方案汇报与设计评审。
 
 ---
 
-## 🚀 快速上手
+## 🚀 3 分钟快速上手
 
-### 环境准备
-- [Bun](https://bun.sh/) (推荐) 或 Node.js ≥ 18
-- [Rust](https://www.rust-lang.org/) (用于 Tauri 桌面端构建)
-- macOS / Windows / Linux 开发环境
+### 第一步：配置您的 AI 助手密钥
+1. 启动 AI Designer Studio；
+2. 点击右上角或设置面板中的 **「AI 模型设置」**；
+3. 选择您常用的提供商（例如：**DeepSeek** 或 **阿里云百炼** 或 **OpenAI**）；
+4. 填入您的 API Key（数据仅加密保存在本地系统受控存储中），点击「测试连通性」确认连接成功。
+   > 💡 *如果您在本地运行了 Ollama，只需选择自定义端点并填入 `http://localhost:11434/v1` 即可零成本离线体验。*
 
-### 1. 安装依赖
-```bash
-bun install
-```
+### 第二步：创建您的第一个设计工程
+1. 在首页点击 **「新建工程」**；
+2. 输入工程名称（如：“电商 App 核心流程”）；
+3. 选择设备类型：
+   - 📱 **移动端 (Mobile - 390px)**：适合 iOS / Android 手机原型；
+   - 💻 **电脑端 (PC - 1440px)**：适合 Web 官网、SaaS 后台或桌面管理系统；
+4. 选择工程保存文件夹（工程将以文件夹形式完整沉淀在您的电脑中）。
 
-### 2. 启动 Web 调试环境
-```bash
-bun run dev
-```
-启动后在浏览器访问 `http://localhost:5173/`。首次进入会自动呈现「工程管理页」，您可以一键新建或载入示例工程。
+### 第三步：输入需求，见证创意生成
+点击右侧活动栏的 **AI 对话** 抽屉，在输入框中输入您的第一条设计构想，例如：
+> “*设计一个现代极简风格的企业 SaaS 登录页面，包含企业邮箱登录、密码输入框、微信扫码切换 Tab 以及底部服务协议。*”
 
-### 3. 运行自动化测试与类型检查
-工程内建了严格的质量防线与 PRD 验收套件：
-```bash
-# 执行全部 74 个自动化单元测试与综合验收用例
-bun test
-
-# TypeScript 类型安全校验
-bun run type-check
-
-# 前端生产打包构建
-bun run build
-```
+点击发送，AI 将在画板中为您快速建立第一个画框并开始流式渲染！
 
 ---
 
-## 🖥️ 桌面端构建与分发 (Tauri 2)
+## 💡 常用提示词（Prompt）精选指南
 
-### 桌面端开发预览
-```bash
-bunx tauri dev
-```
+想让 AI 生成最贴合预期的设计？不妨参考以下提问技巧：
 
-### 桌面端一键编译与打包
-```bash
-# 方式 A：一键打包完整 macOS 分发产物 (.app + .dmg + .zip)
-bun run package:desktop
-
-# 方式 B：仅生成原生 .app 应用程序
-bun run tauri:build
-```
-
-编译完成后，分发包将输出在 [`dist-desktop/`](./dist-desktop) 目录下：
-- **`AI Designer Studio.app`** (~8.4 MB)：macOS 原生应用程序。
-- **`AI-Designer-Studio-1.0.0-macos.dmg`** (~3.5 MB)：包含应用拖拽快捷安装的标准磁盘镜像。
-- **`AI-Designer-Studio-1.0.0-macos.zip`** (~3.1 MB)：即开即用的便携式压缩分发包。
-
-运行桌面程序：
-```bash
-open "dist-desktop/AI Designer Studio.app"
-```
+| 目标场景 | 推荐提示词范例 |
+| :--- | :--- |
+| **全流程页面拓展** | “参考当前页面的风格，为我们的应用生成一个「用户充值与会员开通」页面，包含月卡/季卡/年卡横向比选卡片、权益对比列表以及底部固定的立即开通按钮。” |
+| **局部细节微调** | 鼠标点击画框内的目标容器，输入：“*把刚才选中的卡片背景改为带毛玻璃微透明质感，边框改为淡蓝色微光，内部文字稍微拉开垂直间距。*” |
+| **主题氛围重塑** | “*为当前工程切换到科技冷灰风格，并将所有主操作按钮的强调色强化，增强整体页面的高端商务质感。*” |
+| **移动端专项优化** | “*当前移动端页面的底部结算栏需要在页面下方悬浮吸底，请确保包含安全区距离，并加入结算总价与高亮结账按钮。*” |
 
 ---
 
-## 🧪 自动化测试套件说明
+## ⌨️ 常用快捷键速查表 (Cheat Sheet)
 
-| 测试文件 | 用例数 | 覆盖核心内容 |
-| :--- | :---: | :--- |
-| [`test/prd_acceptance.test.tsx`](./test/prd_acceptance.test.tsx) | 20 | PRD D1–D22 决策验证、单页 HTML 剥离导出、AI 并排采纳三分支、组件冲突跳过、工程记忆 |
-| [`test/acceptance.test.tsx`](./test/acceptance.test.tsx) | 17 | M1 工程管理、档位创建后只读、画框顶栏拖动位移换算、折叠面板记忆持久化 |
-| [`test/textNode.test.ts`](./test/textNode.test.ts) | 17 | ISSUE-001~004 回归验证、直接子文本保护、void 元素置灰、DOM 安全写回 |
-| [`test/projectRegistry.test.ts`](./test/projectRegistry.test.ts) | 11 | 多工程注册表隔离、元数据读取、损坏容错降级、旧版单工程存档平滑迁移 |
-| [`test/studio_full.test.ts`](./test/studio_full.test.ts) | 8 | NidEngine 稳定哈希、TokenLint 扫描与自动修复、PromptBuilder 上下文拼装 |
-| [`test/phase3.test.ts`](./test/phase3.test.ts) | 1 | DOMParser 环境下的组件结构指纹提取与重复子树探测 |
+| 按键操作 | 功能说明 | 适用场景 |
+| :--- | :--- | :--- |
+| **空格 + 鼠标左键拖动** | 自由平移漫游画板 | 全局画板 |
+| **触控板双指滑动** | 平移画板（支持上下左右任意方向） | 全局画板 |
+| **Cmd / Ctrl + 鼠标滚轮** | 以鼠标为中心平滑缩放画板 (10% ~ 400%) | 全局画板 |
+| **Cmd / Ctrl + Z** | 撤销上一步操作 (支持画框修改、属性微调、删除恢复) | 全局工作台 |
+| **Cmd / Ctrl + Shift + Z** | 重做下一步操作 | 全局工作台 |
+| **单击画框内元素** | 选中节点并打开右侧属性检查器 | 画框内部 |
+| **双击文本内容** | 进入就地行内文字编辑模式 | 画框文本 |
+| **Enter (回车键)** | 确认并保存行内文字编辑 | 文本编辑中 |
+| **Esc (退出键)** | 取消行内编辑并恢复原文字 | 文本编辑中 |
+| **Delete / Backspace** | 级联安全删除选中的节点及其所有子元素 | 选中节点时 |
+| **双击画框上方标题** | 就地重命名该画框名称 | 画框上方标题 |
+
+---
+
+## 🔒 隐私与数据安全承诺
+
+AI Designer Studio 秉承 **“本地优先 (Local-First)”** 理念：
+- **工程数据完全归属用户**：您的工程以开放规范的本地文件夹（包含 `project.json`、页面 `screens/*.html` 及 `assets/` 附件）存储在您指定的硬盘目录中；
+- **绝无云端数据回传**：除与您自行指定的 AI 服务商（如 DeepSeek、OpenAI）发送生成提示词外，本软件不向任何第三方服务器上传您的设计文档、画框内容或个人工程元数据；
+- **API 密钥本地加密**：您的模型密钥仅保存在本机操作系统的安全存储中，绝不离开您的设备。
+
+---
+
+## ❓ 常见问题答疑 (FAQ)
+
+<details>
+<summary><strong>Q: 导出的单页 HTML 原型，发给客户或同事能在没有安装本软件的电脑上打开吗？</strong></summary>
+<br>
+<strong>完全可以。</strong> 导出的 HTML 原型采用完全自包含技术，所有的 CSS 样式、排版基座与字体图标定义均已内嵌。无论是发送给客户在微信/邮件中双击查看，还是放到内网服务器中演示，都能得到 100% 一致的高保真交互效果。
+</details>
+
+<details>
+<summary><strong>Q: 为什么创建工程后不能随意在 PC 端和手机端之间切换？</strong></summary>
+<br>
+真正的专业 UI/UX 原型并非粗暴将网页压缩变形。PC 端（1440px 容器流、多列分栏、悬浮态）与移动端（390px 单列流、拇指操作热区、吸底导航栏、安全区留白）在交互语义和 AI 生成约束上截然不同。为了保证生成产物的严谨性与工业级保真度，每个工程固定一种设备档位。若需多端方案，可为同项目分别创建 PC 与 Mobile 两套工程。
+</details>
+
+<details>
+<summary><strong>Q: 如果我删除了一个卡片容器，里面的子文本和按钮会怎么样？</strong></summary>
+<br>
+软件内置级联删除引擎。删除父容器时，其内部所有嵌套的子元素会被 100% 完整干净地同步移除，绝不会在页面底部残留孤儿标签或游离内容，同时多余的样式覆盖层也会被自动清除。如果不小心删错，随时按下 <code>Ctrl+Z</code> 即可瞬间完整恢复。
+</details>
+
+<details>
+<summary><strong>Q: 如何接入我本地部署的开源大模型（如 Ollama / vLLM）？</strong></summary>
+<br>
+点击右上角「设置」→「AI 模型设置」，添加新配置时选择 <strong>Custom (兼容 OpenAI)</strong>，端点填入 <code>http://localhost:11434/v1</code>（Ollama 默认地址），模型名称输入本地已下载的模型（如 <code>qwen2.5-coder</code>），API Key 任意填写英文字符即可畅享完全离线的 AI 原型设计体验。
+</details>
+
+---
+
+## 👨‍💻 开发者与代码贡献者通道
+
+如果您是全栈工程师、开源贡献者，或希望深入了解系统的底层架构与代码实现：
+- 架构蓝图与 30 项技术决策（D1–D30）：请参阅 [产品需求文档 (`doc/prd.md`)](./doc/prd.md)；
+- 研发闭环标准、质量守门规范与避坑手册：请参阅 [智能体协作准则 (`AGENTS.md`)](./AGENTS.md)；
+- 全量特性索引与 53 套测试套件概览：请参阅 [系统技术文档中心 (`doc/README.md`)](./doc/README.md)。
 
 ---
 
 ## 📄 许可证
 
-本项目遵循 [MIT License](./LICENSE) 协议。
+本项目基于 [MIT License](./LICENSE) 开源发布。

@@ -1,4 +1,5 @@
 import { DesignSystem } from './designSystem';
+import { QuickPromptItem } from './quickPrompt';
 
 export type ScreenId = string;
 export type Nid = string;
@@ -102,5 +103,7 @@ export interface ProjectData {
   assets: Asset[];
   components?: ComponentDefinition[];
   decisions: Decision[];
+  coverImage?: string;
+  quickPrompts?: QuickPromptItem[];
 }
 
