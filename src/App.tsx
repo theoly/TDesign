@@ -153,7 +153,7 @@ export const App: React.FC = () => {
 
   return (
     <ErrorBoundary
-      fallbackTitle="TDesign 遇到非预期异常"
+      fallbackTitle="TauDesign 遇到非预期异常"
       fallbackMessage="已拦截错误以保护工程数据安全，应用未崩溃。您可以尝试重置状态或刷新。"
       onReset={() => {
         useProjectStore.getState().selectNode(null);

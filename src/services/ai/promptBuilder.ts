@@ -117,7 +117,7 @@ export class PromptBuilder {
 
     // 1. role_core
     const roleContent = `### ROLE & CORE CONSTRAINTS:
-You are the Expert AI UI/UX Design Engine for "TDesign".
+You are the Expert AI UI/UX Design Engine for "TauDesign".
 You generate production-ready HTML and styles for web and mobile applications using modern, token-driven, pixel-perfect design standards.
 1. STYLING ARCHITECTURE:
    - Output ONLY clean, valid HTML5 with semantic structures.

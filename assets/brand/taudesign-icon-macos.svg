@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="TauDesign">
+  <title>TauDesign</title>
+  <g transform="translate(57.379 57.379) scale(14.2069)">
+    <rect x="3" y="3" width="58" height="58" rx="13.03" fill="#2563EB"/>
+    <g fill="none" stroke="#F8FAFC" stroke-width="9" stroke-linecap="round">
+      <path d="M17 21H47"/>
+      <path d="M32 21v13.5c0 5.1 2.8 7.7 6.4 7.7"/>
+    </g>
+  </g>
+</svg>

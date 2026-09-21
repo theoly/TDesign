@@ -45,7 +45,7 @@ export function buildPolishPrompt(options: PolishOptions): string {
       ? `\nPROTECTED NODES (the user has manually styled these; leave their class attribute untouched):\n${options.protectedNids.join(', ')}\n`
       : '';
 
-  return `You are the Visual Refinement Engine for "TDesign".
+  return `You are the Visual Refinement Engine for "TauDesign".
 Your job is to polish, refine, and elevate an existing HTML screen design into a production-grade, aesthetically stunning experience.
 
 ${IMMUTABLE_RULES}

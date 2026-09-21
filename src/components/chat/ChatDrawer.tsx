@@ -600,7 +600,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                    <span>TDesign</span>
+                    <span>TauDesign</span>
                   </>
                 )}
               </div>

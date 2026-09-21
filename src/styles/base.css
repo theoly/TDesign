@@ -1,5 +1,5 @@
 /* ==========================================================================
- * TDesign - Token-Based Base Stylesheet (base.css)
+ * TauDesign - Token-Based Base Stylesheet (base.css)
  * 唯一权威源 (Single Source of Truth for Screen Styling)
  * All components & frames inside the canvas MUST be styled using these classes or CSS variables.
  * NO direct Tailwind classes allowed inside the rendered screen frames!

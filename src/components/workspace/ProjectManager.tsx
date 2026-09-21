@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { BrandMark } from '../common/BrandMark';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { themePresets } from '../../utils/themePresets';
 import {
@@ -455,11 +456,9 @@ export const ProjectManager: React.FC = () => {
     <div className="w-screen h-screen bg-slate-950 text-slate-200 overflow-y-auto" onClick={() => setMenuFor(null)}>
       <div className="max-w-5xl mx-auto px-8 py-12">
         <header className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow">
-            T
-          </div>
+          <BrandMark size={40} className="shadow rounded-xl" />
           <div>
-            <h1 className="text-lg font-bold text-slate-100">TDesign</h1>
+            <h1 className="text-lg font-bold text-slate-100">TauDesign</h1>
             <p className="text-xs text-slate-500">选择一个工程继续，或新建一个开始。</p>
           </div>
         </header>

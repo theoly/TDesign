@@ -1,7 +1,7 @@
-# TDesign · 智能原型与设计工作台 / Intelligent Prototype & Design Studio
+# TauDesign · 智能原型与设计工作台 / Intelligent Prototype & Design Studio
 
 <p align="center">
-  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="TDesign Overview" width="920" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.35);" />
+  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="TauDesign Overview" width="920" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.35);" />
 </p>
 
 <p align="center">
@@ -24,18 +24,18 @@
 
 > ⚠️ **开发阶段提示与免责声明 / Early Preview & Disclaimer**
 >
-> - 🇨🇳 **中文**：TDesign 当前处于**早期预览与快速迭代阶段 (Developer Preview / Alpha)**，非商业稳定发布版本。功能、界面与底层数据格式可能频繁变动。使用前请注意**定期备份重要工程数据**，由 AI 生成的界面建议经人工核查后使用。本项目按 Apache License 2.0 “按现状”提供，不承担任何明示或暗示的担保。
-> - 🇬🇧 **English**: TDesign is currently in **Developer Preview / Alpha stage** (active development, non-stable release). Features, UI layouts, and local data schemas may evolve rapidly. Please maintain **regular backups of your project folders**. AI outputs should be reviewed before production use. Distributed under the Apache License 2.0 "as-is" without warranty.
+> - 🇨🇳 **中文**：TauDesign 当前处于**早期预览与快速迭代阶段 (Developer Preview / Alpha)**，非商业稳定发布版本。功能、界面与底层数据格式可能频繁变动。使用前请注意**定期备份重要工程数据**，由 AI 生成的界面建议经人工核查后使用。本项目按 Apache License 2.0 “按现状”提供，不承担任何明示或暗示的担保。
+> - 🇬🇧 **English**: TauDesign is currently in **Developer Preview / Alpha stage** (active development, non-stable release). Features, UI layouts, and local data schemas may evolve rapidly. Please maintain **regular backups of your project folders**. AI outputs should be reviewed before production use. Distributed under the Apache License 2.0 "as-is" without warranty.
 
 ---
 
 ## 🇨🇳 简体中文
 
-### 💡 为什么选择 TDesign？
+### 💡 为什么选择 TauDesign？
 
 以往使用 AI 生成界面，常常面临三大痛点：**“毛坯感严重”**（样式简陋难以直接作为正式方案）、**“黑盒不可控”**（稍作修改就会破坏整体页面）以及**“一次性孤岛”**（无法像 Figma 那样在全局画板中纵览与精细微调）。
 
-**TDesign** 专为解决这些问题而设计：
+**TauDesign** 专为解决这些问题而设计：
 - 🚀 **一句话秒级成页**：输入日常业务语言，AI 即刻根据专业 UI 规范生成具备细腻层次、排版与微质感的高保真原型；
 - 🎨 **Figma 级别的无限多画框画板**：在同一张无限画布上同时构建登录、首页、详情、个人中心等整套完整用户旅程；
 - 🖱️ **所见即所得的可视化点选精修**：看哪不顺眼点哪里，直观调节边距、颜色、对齐与文字，无需手写一行代码；
@@ -101,7 +101,7 @@
 ### 🚀 3 分钟快速上手
 
 #### 第一步：配置您的 AI 助手密钥
-1. 启动 TDesign；
+1. 启动 TauDesign；
 2. 点击右上角或设置面板中的 **「AI 模型设置」**；
 3. 选择您常用的提供商（例如：**DeepSeek**、**阿里云百炼** 或 **OpenAI**）；
 4. 填入您的 API Key（数据仅保存在本地受控存储中），点击「测试连通性」确认连接成功。
@@ -154,7 +154,7 @@
 
 ### 🔒 隐私与数据安全承诺
 
-TDesign 秉承 **“本地优先 (Local-First)”** 理念：
+TauDesign 秉承 **“本地优先 (Local-First)”** 理念：
 - **工程数据完全归属用户**：您的工程以开放规范的本地文件夹（包含 `project.json`、页面 `screens/*.html` 及 `assets/` 附件）存储在您指定的硬盘目录中；
 - **绝无云端数据回传**：除与您自行指定的 AI 服务商（如 DeepSeek、OpenAI）发送生成提示词外，本软件不向任何第三方服务器上传您的设计文档、画框内容或个人工程元数据；
 - **API 密钥本地加密**：您的模型密钥仅保存在本机操作系统的安全存储中，绝不离开您的设备。
@@ -191,17 +191,17 @@ TDesign 秉承 **“本地优先 (Local-First)”** 理念：
 
 ### ⚠️ 开发阶段与免责声明
 
-在下载、编译或使用 TDesign 之前，请仔细阅读以下免责与使用说明：
+在下载、编译或使用 TauDesign 之前，请仔细阅读以下免责与使用说明：
 
 1. **早期开发阶段与非稳定性 (Developer Preview / Alpha)**：
    - 本项目目前处于活跃的早期开发阶段，**尚未发布正式商用稳定版本**；
    - 在使用过程中，您可能会遇到未预期的程序错误 (Bug)、界面渲染异常、偶发崩溃或多平台兼容性差异；
    - 软件的交互界面、设计系统 Token 规范、菜单结构及底层实现可能在后续更新中频繁优化与调整。
 2. **工程数据安全与定期备份建议**：
-   - TDesign 采用本地文件夹机制（`*.aidesign`）存储工程。随着功能迭代，新旧版本之间的数据格式可能发生架构升级；
+   - TauDesign 采用本地文件夹机制（`*.aidesign`）存储工程。随着功能迭代，新旧版本之间的数据格式可能发生架构升级；
    - **强烈建议**：请勿将未经备份的重要设计成果作为本工具的单一存档。在体验与原型制作过程中，请务必定期将工程目录备份至外部安全存储介质。
 3. **第三方 AI 服务与生成内容说明**：
-   - TDesign 为本地客户端软件，不托管或直接运行任何私有云端模型；所有原型代码均由用户自行配置的第三方提供商（如 DeepSeek、OpenAI、Anthropic、阿里百炼等）或本地运行的模型（如 Ollama）计算生成；
+   - TauDesign 为本地客户端软件，不托管或直接运行任何私有云端模型；所有原型代码均由用户自行配置的第三方提供商（如 DeepSeek、OpenAI、Anthropic、阿里百炼等）或本地运行的模型（如 Ollama）计算生成；
    - AI 生成的代码质量、排版布局及色彩表现直接受所选大模型的理解能力与提示词影响；
    - 开发者与贡献者不对 AI 产出内容的准确性、完整性、合法合规性以及潜在的知识产权风险承担保证或赔偿责任。
 4. **开源许可条款 (Apache License 2.0)**：
@@ -214,15 +214,15 @@ TDesign 秉承 **“本地优先 (Local-First)”** 理念：
 
 ## 🇬🇧 English
 
-### 💡 Why TDesign?
+### 💡 Why TauDesign?
 
 Traditional AI UI generators often suffer from three major pain points: **"Rough & Unfinished"** (crude outputs that can never be delivered directly to stakeholders), **"Black-Box & Uncontrollable"** (one tiny prompt tweak ruins the entire layout), and **"One-Off Silos"** (isolated single pages lacking the bird's-eye view and precision tuning of Figma).
 
-**TDesign** is built from the ground up to solve these challenges:
-- 🚀 **From Prompt to High-Fidelity in Seconds**: Express your product ideas in plain business language; TDesign instantly synthesizes polished, token-compliant interactive screens with professional hierarchy and micro-textures.
+**TauDesign** is built from the ground up to solve these challenges:
+- 🚀 **From Prompt to High-Fidelity in Seconds**: Express your product ideas in plain business language; TauDesign instantly synthesizes polished, token-compliant interactive screens with professional hierarchy and micro-textures.
 - 🎨 **Figma-Grade Infinite Canvas**: Construct complete end-to-end user journeys (Sign-in, Dashboard, Details, Profile) side by side on an expansive infinite artboard.
 - 🖱️ **Point-and-Click Visual Precision**: Click any element on canvas to tweak spacing, colors, alignment, and typography without writing a single line of CSS.
-- ⚖️ **Side-by-Side Proposal Adoption**: When requesting AI adjustments, TDesign lays out before-and-after artboards side by side. Adopt, keep both, or discard with full control.
+- ⚖️ **Side-by-Side Proposal Adoption**: When requesting AI adjustments, TauDesign lays out before-and-after artboards side by side. Adopt, keep both, or discard with full control.
 - 🔒 **100% Local-First Data Sovereignty**: All projects live in your local file system (`*.aidesign` folder). Zero telemetry, zero cloud lock-in, and 100% offline ownership.
 
 ---
@@ -284,7 +284,7 @@ Traditional AI UI generators often suffer from three major pain points: **"Rough
 ### 🚀 Quick Start in 3 Minutes
 
 #### Step 1: Configure Your AI Provider
-1. Launch TDesign;
+1. Launch TauDesign;
 2. Click **AI Settings** in the top-right corner;
 3. Choose your preferred provider (**DeepSeek**, **Aliyun DashScope**, **OpenAI**, etc.);
 4. Enter your API Key and click "Test Connection".
@@ -302,7 +302,7 @@ Traditional AI UI generators often suffer from three major pain points: **"Rough
 Open the **AI Chat** drawer on the right and type your design concept:
 > "*Design a minimalist SaaS login page with corporate email sign-in, password input, WeChat QR code tab switcher, and terms of service at the bottom.*"
 
-Hit Send, and watch TDesign construct your first screen on the canvas in real time!
+Hit Send, and watch TauDesign construct your first screen on the canvas in real time!
 
 ---
 
@@ -326,9 +326,9 @@ Hit Send, and watch TDesign construct your first screen on the canvas in real ti
 
 ### 🔒 Privacy & Security Commitment
 
-TDesign is strictly built around a **Local-First** philosophy:
+TauDesign is strictly built around a **Local-First** philosophy:
 - **You Own Your Data**: Projects are stored as transparent local folders (containing `project.json`, `screens/*.html`, and `assets/`) on your drive.
-- **Zero Cloud Leakage**: Outside of sending your prompts to your designated AI providers (e.g. DeepSeek, OpenAI), TDesign never uploads your project files, canvas contents, or telemetry to any third-party server.
+- **Zero Cloud Leakage**: Outside of sending your prompts to your designated AI providers (e.g. DeepSeek, OpenAI), TauDesign never uploads your project files, canvas contents, or telemetry to any third-party server.
 - **Secure Local Storage**: API keys are securely stored on your local machine and never transmitted elsewhere.
 
 ---
@@ -336,7 +336,7 @@ TDesign is strictly built around a **Local-First** philosophy:
 ### ❓ FAQ
 
 <details>
-<summary><strong>Q: Can exported standalone HTML files be opened on computers without TDesign installed?</strong></summary>
+<summary><strong>Q: Can exported standalone HTML files be opened on computers without TauDesign installed?</strong></summary>
 <br>
 <strong>Yes, absolutely.</strong> Exported HTML files are 100% self-contained with all CSS variables, typography, and utility classes inlined. Anyone can double-click to view and interact in Chrome, Safari, or Edge without any dependencies.
 </details>
@@ -350,7 +350,7 @@ Professional UI/UX design is not merely resizing browser viewports. Desktop (mul
 <details>
 <summary><strong>Q: What happens if I delete a card container?</strong></summary>
 <br>
-TDesign features a cascading deletion engine. Deleting a parent container cleanly removes all nested text, buttons, and icons from the DOM tree without leaving orphan tags, while simultaneously cleaning up orphaned CSS overrides. You can always press <code>Ctrl+Z</code> to undo immediately.
+TauDesign features a cascading deletion engine. Deleting a parent container cleanly removes all nested text, buttons, and icons from the DOM tree without leaving orphan tags, while simultaneously cleaning up orphaned CSS overrides. You can always press <code>Ctrl+Z</code> to undo immediately.
 </details>
 
 <details>
@@ -363,21 +363,21 @@ Click "AI Settings" in the top-right corner. When adding a new configuration, ch
 
 ### ⚠️ Development Status & Disclaimer
 
-Please carefully review the following disclaimers before building, downloading, or running TDesign:
+Please carefully review the following disclaimers before building, downloading, or running TauDesign:
 
 1. **Active Development & Non-Stable Release (Developer Preview / Alpha)**:
    - This project is in its early, rapid-iteration phase and has **not reached a stable commercial or production 1.0 release**;
    - You may encounter unexpected bugs, layout and CSS rendering discrepancies, intermittent crashes, or platform-specific glitches;
    - User interfaces, design token definitions, menus, and internal implementation details are subject to frequent changes without notice.
 2. **Data Safety & Regular Backup Recommendations**:
-   - TDesign organizes projects as transparent local directories (`*.aidesign`). As features and CSS whitelist standards evolve, local data structures may undergo architectural migrations;
+   - TauDesign organizes projects as transparent local directories (`*.aidesign`). As features and CSS whitelist standards evolve, local data structures may undergo architectural migrations;
    - **Strong Recommendation**: Never use early preview builds as the sole unbacked repository for critical deliverables. Always create regular external backups of your project directories.
 3. **Third-Party AI Services & Output Notice**:
-   - TDesign operates strictly as a client-side interface tool and does not host or operate cloud AI models. All UI layouts and code are generated by third-party APIs configured by you (e.g., DeepSeek, OpenAI, Anthropic, Aliyun DashScope) or your local runtime (e.g., Ollama);
+   - TauDesign operates strictly as a client-side interface tool and does not host or operate cloud AI models. All UI layouts and code are generated by third-party APIs configured by you (e.g., DeepSeek, OpenAI, Anthropic, Aliyun DashScope) or your local runtime (e.g., Ollama);
    - The quality, aesthetic accuracy, and code correctness of generated screens directly depend on the capabilities of the configured model and the provided prompts;
    - The authors and maintainers provide no warranties regarding the accuracy, fitness, legality, or IP compliance of any content synthesized by third-party AI models.
 4. **Open-Source License & Limitation of Liability (Apache License 2.0)**:
-   - TDesign is released under the terms of the **Apache License 2.0**; the full text is available in the [LICENSE](./LICENSE) file at the root of this repository;
+   - TauDesign is released under the terms of the **Apache License 2.0**; the full text is available in the [LICENSE](./LICENSE) file at the root of this repository;
    - Subject to the terms of the License, You are granted a perpetual, worldwide, non-exclusive, no-charge copyright and patent license; when redistributing the Work or Derivative Works, You must include a copy of the License, retain the original copyright notices, and carry prominent notices on any modified files;
    - The software is provided on an **"AS IS" BASIS**, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE;
    - IN NO EVENT AND UNDER NO LEGAL THEORY SHALL ANY CONTRIBUTOR BE LIABLE TO YOU FOR DAMAGES, INCLUDING ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES OF ANY CHARACTER ARISING AS A RESULT OF THIS LICENSE OR OUT OF THE USE OR INABILITY TO USE THE WORK (INCLUDING BUT NOT LIMITED TO LOSS OF GOODWILL, DATA LOSS, WORK STOPPAGE, COMPUTER FAILURE OR MALFUNCTION, OR ANY AND ALL OTHER COMMERCIAL DAMAGES OR LOSSES), EVEN IF SUCH CONTRIBUTOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
@@ -397,7 +397,7 @@ If you are a full-stack engineer or open-source contributor interested in system
 Distributed under the [Apache License 2.0](./LICENSE) / 基于 [Apache License 2.0](./LICENSE) 开源。
 
 ```
-Copyright 2026 TDesign Authors
+Copyright 2026 TauDesign Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

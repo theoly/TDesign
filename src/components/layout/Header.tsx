@@ -1,6 +1,7 @@
 import React from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
+import { BrandMark } from '../common/BrandMark';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { TokenLintEngine } from '../../utils/tokenLint';
 import {
@@ -69,10 +70,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
       {/* Left: Brand & Project Name */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white text-sm shadow">
-            T
-          </div>
-          <span className="font-bold text-slate-100 hidden sm:inline">TDesign</span>
+          <BrandMark size={28} className="shadow rounded-lg" />
+          <span className="font-bold text-slate-100 hidden sm:inline">TauDesign</span>
         </div>
 
         <div className="h-4 w-px bg-slate-800" />

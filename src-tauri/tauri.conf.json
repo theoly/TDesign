@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "TDesign",
+  "productName": "TauDesign",
   "version": "1.0.0",
-  "identifier": "com.tdesign.studio",
+  "identifier": "com.taudesign.studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "TDesign",
+        "title": "TauDesign",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
@@ -28,6 +28,7 @@
     }
   },
   "bundle": {
+    "active": true,
     "targets": [
       "app"
     ],
