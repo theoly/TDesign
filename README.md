@@ -1,7 +1,7 @@
 # TauDesign · 智能原型与设计工作台 / Intelligent Prototype & Design Studio
 
 <p align="center">
-  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="TauDesign Overview" width="920" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.35);" />
+  <img src="assets/brand/taudesign-mark.svg" alt="TauDesign" width="104" height="104" />
 </p>
 
 <p align="center">
