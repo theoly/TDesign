@@ -5,6 +5,14 @@
 </p>
 
 <p align="center">
+  <img src="assets/screenshots/editor-workspace.png" alt="TauDesign 编辑器工作台 / TauDesign editor workspace" width="880" />
+</p>
+
+<p align="center">
+  <sub>编辑器工作台：左侧页面画框、中部无限画布、右侧 AI 原生助手与属性检查器<br>Editor workspace: screen list on the left, infinite canvas in the middle, AI assistant and inspector on the right</sub>
+</p>
+
+<p align="center">
   <strong>用自然语言创造专业级交互原型 · 人人皆可使用的 AI 原生高保真设计工具</strong><br>
   <strong>Create production-grade interactive prototypes with natural language · An AI-first high-fidelity design tool for everyone</strong>
 </p>
