@@ -9,6 +9,8 @@ import { setTextByNid, uneditableHint } from '../../utils/textNode';
 import { duplicateElementByNid, wrapElementByNid } from '../../utils/domPatcher';
 import { LayoutInspector } from './LayoutInspector';
 import { BoxModelInspector } from './BoxModelInspector';
+import { PositionSizeInspector } from './PositionSizeInspector';
+import { RadiusInspector } from './RadiusInspector';
 import {
   AlertTriangle,
   ArrowDown,
@@ -24,8 +26,22 @@ import {
   Sparkles,
   Trash2,
   Type,
-  Wand2
+  Wand2,
+  Wrench
 } from 'lucide-react';
+
+/** 属性面板分组 (doc/feature/inspector-geometry-tabs/spec.md BR-INS-01) */
+export type InspectorTabKey = 'layout' | 'style' | 'actions';
+
+export const INSPECTOR_TABS: Array<{
+  key: InspectorTabKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { key: 'layout', label: '布局', icon: Box },
+  { key: 'style', label: '外观', icon: Sparkles },
+  { key: 'actions', label: '操作', icon: Wrench }
+];
 
 const formatBreadcrumbClass = (rawCls: unknown): string => {
   if (typeof rawCls === 'string') {
@@ -66,6 +82,9 @@ export const PropertyInspector: React.FC = () => {
   const { getActiveProviderForRole } = useAIConfigStore();
   const { addCheckpoint } = useHistoryStore();
 
+  // 当前分组。切换选中元素时刻意不重置——连续调同类属性是主要工作流 (BR-INS-08)
+  const [activeTab, setActiveTab] = useState<InspectorTabKey>('layout');
+
   // Point-and-Edit AI state
   const [pointPrompt, setPointPrompt] = useState('');
   const [isPointGenerating, setIsPointGenerating] = useState(false);
@@ -88,7 +107,7 @@ export const PropertyInspector: React.FC = () => {
     const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem) : null;
 
     return (
-      <div className="w-72 h-full bg-slate-900 border-l border-slate-800 p-5 flex flex-col justify-between text-xs select-none">
+      <div className="w-[340px] h-full bg-slate-900 border-l border-slate-800 p-5 flex flex-col justify-between text-xs select-none">
         <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500">
           <Sliders className="w-8 h-8 text-slate-600 mb-3" />
           <span className="font-medium text-slate-400">未选中任何元素</span>
@@ -264,7 +283,7 @@ Requirements:
   };
 
   return (
-    <div className="w-72 h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20 text-xs select-none">
+    <div className="w-[340px] h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20 text-xs select-none">
       {/* Header & Breadcrumb (PRD §3.6.1) */}
       <div className="p-3 border-b border-slate-800 bg-slate-900/60">
         <div className="flex items-center gap-1 text-slate-400 text-[11px] mb-2 font-mono overflow-x-auto whitespace-nowrap pb-1">
@@ -297,7 +316,188 @@ Requirements:
         </div>
       </div>
 
+      {/* 常驻：局部定向 AI 微调。它是跨场景高频入口，不该藏进任一 Tab (BR-INS-01) */}
+      <div className="px-3 pt-3">
+        {/* Point-and-Edit: 局部定向 AI 微调 (PRD §3.6.2) */}
+        <div className="p-3 bg-purple-950/40 border border-purple-800/50 rounded-xl space-y-2">
+          <div className="flex items-center gap-1.5 text-purple-300 font-semibold text-[11px]">
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>局部 AI 定向微调 (Point-and-Edit)</span>
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              value={pointPrompt}
+              onChange={(e) => setPointPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handlePointAndEdit();
+              }}
+              placeholder="对当前选中元素提需求，如：加微光动画..."
+              className="w-full bg-slate-950 border border-purple-800/60 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-purple-500 pr-8"
+            />
+            <button
+              onClick={handlePointAndEdit}
+              disabled={isPointGenerating || !pointPrompt.trim()}
+              className="absolute right-1.5 top-1.5 p-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded transition"
+            >
+              <Wand2 className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 常驻：文本内容。ISSUE-002 的教训——字段时有时无会让用户以为功能损坏，
+          因此它不进任何 Tab，始终可见 (BR-INS-01) */}
+      <div className="px-3 pt-3">
+        {/* Text Content —— 常驻渲染：字段时有时无会让用户以为功能损坏 (ISSUE-002) */}
+        {(() => {
+          const editable = selectedNode.textEditable !== false;
+          const hint = selectedNode.textReason ? uneditableHint(selectedNode.textReason) : null;
+          return (
+            <div className="space-y-1.5 pt-2 border-t border-slate-800">
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <Type className="w-3.5 h-3.5 text-slate-400" />
+                <span>文本内容</span>
+              </label>
+              <input
+                type="text"
+                value={textDraft}
+                disabled={!editable}
+                placeholder={editable ? '（空）' : ''}
+                onChange={(e) => setTextDraft(e.target.value)}
+                onBlur={(e) => handleTextChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                }}
+                className={`w-full bg-slate-950 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none ${
+                  editable
+                    ? 'border-slate-700 text-slate-200 focus:border-blue-500'
+                    : 'border-slate-800 text-slate-500 cursor-not-allowed'
+                }`}
+              />
+              {hint && <p className="text-[10px] text-slate-500 leading-tight">{hint}</p>}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Tab 分组 (BR-INS-01) */}
+      <div className="flex items-center gap-1 px-3 pt-3 border-b border-slate-800">
+        {INSPECTOR_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            data-testid={`inspector-tab-${tab.key}`}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-t-lg border-b-2 transition ${
+              activeTab === tab.key
+                ? 'border-blue-500 text-blue-300 bg-slate-800/60 font-semibold'
+                : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+            }`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {activeTab === 'layout' && (
+          <>
+            {/* 定位与尺寸 (BR-INS-03/04) */}
+            <PositionSizeInspector
+              computedBox={selectedNode.computedBox}
+              computedLayout={selectedNode.computedLayout}
+              declarations={decs}
+              onStyleChange={handleStyleChange}
+            />
+
+        {/* Layout & Alignment (PRD §3.6.1) */}
+        <LayoutInspector
+          computedLayout={selectedNode.computedLayout}
+          declarations={decs}
+          onStyleChange={handleStyleChange}
+        />
+
+        {/* Box Model & Spacing (PRD §3.6.1) */}
+        <BoxModelInspector
+          computedBox={selectedNode.computedBox}
+          declarations={decs}
+          onStyleChange={handleStyleChange}
+        />
+          </>
+        )}
+
+        {activeTab === 'style' && (
+          <>
+            {/* 圆角 (BR-INS-05) */}
+            <RadiusInspector
+              key={selectedNid}
+              computedLayout={selectedNode.computedLayout}
+              declarations={decs}
+              onStyleChange={handleStyleChange}
+            />
+
+        {/* 阴影层级 */}
+        <div className="space-y-2 pt-2 border-t border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">阴影 (SHADOW)</span>
+          <select
+            value={decs['box-shadow'] || ''}
+            onChange={(e) => handleStyleChange('box-shadow', e.target.value)}
+            aria-label="阴影层级"
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
+          >
+            <option value="">默认</option>
+            <option value="none">无阴影</option>
+            <option value="var(--shadow-sm)">平滑阴影 (SM)</option>
+            <option value="var(--shadow-md)">中等阴影 (MD)</option>
+            <option value="var(--shadow-lg)">浮层阴影 (LG)</option>
+          </select>
+        </div>
+
+        {/* Typography */}
+        <div className="space-y-3 pt-2 border-t border-slate-800">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">排版与字号</span>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="text-[10px] text-slate-500 block mb-1">字号阶梯</span>
+              <select
+                value={decs['font-size'] || ''}
+                onChange={(e) => handleStyleChange('font-size', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
+              >
+                <option value="">默认</option>
+                <option value="var(--font-size-xs)">XS (12px)</option>
+                <option value="var(--font-size-sm)">SM (14px)</option>
+                <option value="var(--font-size-md)">MD (16px)</option>
+                <option value="var(--font-size-lg)">LG (18px)</option>
+                <option value="var(--font-size-xl)">XL (20px)</option>
+                <option value="var(--font-size-2xl)">2XL (24px)</option>
+                <option value="var(--font-size-3xl)">3XL (30px)</option>
+              </select>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 block mb-1">字重</span>
+              <select
+                value={decs['font-weight'] || ''}
+                onChange={(e) => handleStyleChange('font-weight', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
+              >
+                <option value="">默认</option>
+                <option value="400">Regular 400</option>
+                <option value="500">Medium 500</option>
+                <option value="600">Semibold 600</option>
+                <option value="700">Bold 700</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+          </>
+        )}
+
+        {activeTab === 'actions' && (
+          <>
         {/* Component Instance or Extract Banner (PRD §3.7 / D6) */}
         {selectedNode.componentId ? (
           <div className="p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl space-y-2">
@@ -382,34 +582,6 @@ Requirements:
           </div>
         )}
 
-        {/* Point-and-Edit: 局部定向 AI 微调 (PRD §3.6.2) */}
-        <div className="p-3 bg-purple-950/40 border border-purple-800/50 rounded-xl space-y-2">
-          <div className="flex items-center gap-1.5 text-purple-300 font-semibold text-[11px]">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>局部 AI 定向微调 (Point-and-Edit)</span>
-          </div>
-          <div className="relative">
-            <input
-              type="text"
-              value={pointPrompt}
-              onChange={(e) => setPointPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handlePointAndEdit();
-              }}
-              placeholder="对当前选中元素提需求，如：加微光动画..."
-              className="w-full bg-slate-950 border border-purple-800/60 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-purple-500 pr-8"
-            />
-            <button
-              onClick={handlePointAndEdit}
-              disabled={isPointGenerating || !pointPrompt.trim()}
-              className="absolute right-1.5 top-1.5 p-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded transition"
-            >
-              <Wand2 className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-
-
         {/* Structural Operations (PRD §3.6.3) */}
         <div className="space-y-2 pt-1 border-t border-slate-800">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">结构与容器操作</span>
@@ -443,126 +615,6 @@ Requirements:
           </div>
         </div>
 
-        {/* Layout & Alignment (PRD §3.6.1) */}
-        <LayoutInspector
-          computedLayout={selectedNode.computedLayout}
-          declarations={decs}
-          onStyleChange={handleStyleChange}
-        />
-
-        {/* Box Model & Spacing (PRD §3.6.1) */}
-        <BoxModelInspector
-          computedBox={selectedNode.computedBox}
-          declarations={decs}
-          onStyleChange={handleStyleChange}
-        />
-
-        {/* Text Content —— 常驻渲染：字段时有时无会让用户以为功能损坏 (ISSUE-002) */}
-        {(() => {
-          const editable = selectedNode.textEditable !== false;
-          const hint = selectedNode.textReason ? uneditableHint(selectedNode.textReason) : null;
-          return (
-            <div className="space-y-1.5 pt-2 border-t border-slate-800">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Type className="w-3.5 h-3.5 text-slate-400" />
-                <span>文本内容</span>
-              </label>
-              <input
-                type="text"
-                value={textDraft}
-                disabled={!editable}
-                placeholder={editable ? '（空）' : ''}
-                onChange={(e) => setTextDraft(e.target.value)}
-                onBlur={(e) => handleTextChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                }}
-                className={`w-full bg-slate-950 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none ${
-                  editable
-                    ? 'border-slate-700 text-slate-200 focus:border-blue-500'
-                    : 'border-slate-800 text-slate-500 cursor-not-allowed'
-                }`}
-              />
-              {hint && <p className="text-[10px] text-slate-500 leading-tight">{hint}</p>}
-            </div>
-          );
-        })()}
-
-        {/* Typography */}
-        <div className="space-y-3 pt-2 border-t border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">排版与字号</span>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-1">字号阶梯</span>
-              <select
-                value={decs['font-size'] || ''}
-                onChange={(e) => handleStyleChange('font-size', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
-              >
-                <option value="">默认</option>
-                <option value="var(--font-size-xs)">XS (12px)</option>
-                <option value="var(--font-size-sm)">SM (14px)</option>
-                <option value="var(--font-size-md)">MD (16px)</option>
-                <option value="var(--font-size-lg)">LG (18px)</option>
-                <option value="var(--font-size-xl)">XL (20px)</option>
-                <option value="var(--font-size-2xl)">2XL (24px)</option>
-                <option value="var(--font-size-3xl)">3XL (30px)</option>
-              </select>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-1">字重</span>
-              <select
-                value={decs['font-weight'] || ''}
-                onChange={(e) => handleStyleChange('font-weight', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
-              >
-                <option value="">默认</option>
-                <option value="400">Regular 400</option>
-                <option value="500">Medium 500</option>
-                <option value="600">Semibold 600</option>
-                <option value="700">Bold 700</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Box Model & Appearance */}
-        <div className="space-y-3 pt-2 border-t border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">盒模型与外观</span>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-1">圆角规范</span>
-              <select
-                value={decs['border-radius'] || ''}
-                onChange={(e) => handleStyleChange('border-radius', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
-              >
-                <option value="">默认</option>
-                <option value="var(--radius-none)">无圆角 (0px)</option>
-                <option value="var(--radius-sm)">SM (4px)</option>
-                <option value="var(--radius-md)">MD (8px)</option>
-                <option value="var(--radius-lg)">LG (12px)</option>
-                <option value="var(--radius-xl)">XL (16px)</option>
-                <option value="var(--radius-full)">Full 胶囊</option>
-              </select>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-1">阴影层级</span>
-              <select
-                value={decs['box-shadow'] || ''}
-                onChange={(e) => handleStyleChange('box-shadow', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
-              >
-                <option value="">默认</option>
-                <option value="none">无阴影</option>
-                <option value="var(--shadow-sm)">平滑阴影 (SM)</option>
-                <option value="var(--shadow-md)">中等阴影 (MD)</option>
-                <option value="var(--shadow-lg)">浮层阴影 (LG)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
         {/* Reset L4 */}
         {Object.keys(decs).length > 0 && (
           <div className="pt-2 border-t border-slate-800">
@@ -576,6 +628,8 @@ Requirements:
               <span>还原为 AI 基线样式</span>
             </button>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

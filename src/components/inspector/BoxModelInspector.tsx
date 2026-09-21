@@ -94,6 +94,9 @@ export interface SpacingNumberInputProps {
   placeholder?: string;
   allowNegative?: boolean;
   allowAuto?: boolean;
+  /** 无单位数值（如 z-index）：不追加 px */
+  unitless?: boolean;
+  disabled?: boolean;
   onChange: (cssVal: string) => void;
   className?: string;
   title?: string;
@@ -105,6 +108,8 @@ export const SpacingNumberInput: React.FC<SpacingNumberInputProps> = ({
   placeholder,
   allowNegative = false,
   allowAuto = false,
+  unitless = false,
+  disabled = false,
   onChange,
   className,
   title,
@@ -135,6 +140,8 @@ export const SpacingNumberInput: React.FC<SpacingNumberInputProps> = ({
       // 半完成状态，等待后续输入，暂不提交非法 CSS
     } else if (sanitized === 'auto' || sanitized.startsWith('var(')) {
       onChange(sanitized);
+    } else if (unitless) {
+      onChange(sanitized);
     } else {
       const cssVal = formatCssSpacing(sanitized, allowNegative);
       if (cssVal) {
@@ -148,6 +155,9 @@ export const SpacingNumberInput: React.FC<SpacingNumberInputProps> = ({
       if (draft === '-' || draft === '.' || draft === '') {
         setDraft(null);
         onChange('');
+      } else if (unitless) {
+        setDraft(null);
+        onChange(draft);
       } else {
         const cssVal = formatCssSpacing(draft, allowNegative);
         setDraft(null);
@@ -174,7 +184,7 @@ export const SpacingNumberInput: React.FC<SpacingNumberInputProps> = ({
       if (!allowNegative && nextNum < 0) nextNum = 0;
       const nextStr = String(nextNum);
       setDraft(nextStr);
-      onChange(`${nextNum}px`);
+      onChange(unitless ? nextStr : `${nextNum}px`);
     }
   };
 
@@ -184,6 +194,7 @@ export const SpacingNumberInput: React.FC<SpacingNumberInputProps> = ({
       inputMode="numeric"
       value={displayValue}
       placeholder={placeholder}
+      disabled={disabled}
       onChange={handleChange}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}

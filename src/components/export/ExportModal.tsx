@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
-import {
-  buildStandaloneHtml,
-  buildArtifactManifest,
-  downloadBlob,
-  downloadDataUrl
-} from '../../utils/exportRenderer';
+import { buildStandaloneHtml, buildArtifactManifest } from '../../utils/exportRenderer';
 import { exportScreenPng, PngExportEngine } from '../../utils/pngExporter';
-import { Check, Copy, Download, FileCode, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react';
+import {
+  dataUrlToBytes,
+  saveExportFile,
+  SaveExportResult,
+  textToBytes
+} from '../../utils/exportSaver';
+import { AlertCircle, Check, CheckCircle2, Copy, Download, FileCode, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 interface ExportModalProps {
   onClose: () => void;
@@ -35,6 +36,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   const [isExportingPng, setIsExportingPng] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [saveResult, setSaveResult] = useState<(SaveExportResult & { label: string }) | null>(null);
+  const [isSavingHtml, setIsSavingHtml] = useState(false);
   const [lastEngine, setLastEngine] = useState<PngExportEngine | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -59,21 +62,44 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
     ? buildStandaloneHtml(screen, { tokensCss, baseCss, screenOverrides })
     : '';
 
-  const handleDownloadHtml = () => {
+  const handleDownloadHtml = async () => {
     setExportError(null);
-    if (!screen) return;
+    setSaveResult(null);
+    if (!screen || isSavingHtml) return;
+    setIsSavingHtml(true);
 
-    // 1. 优先下载独立 HTML 文件 (BR-01 / ISSUE-024)
-    const blob = new Blob([standaloneHtml], { type: 'text/html;charset=utf-8' });
-    downloadBlob(blob, `${screen?.name || 'design'}.html`);
+    try {
+      // 1. 独立 HTML 文件：由用户在系统保存对话框中选定落点 (BR-SAVE-01)
+      const htmlRes = await saveExportFile({
+        fileName: `${screen.name || 'design'}.html`,
+        bytes: textToBytes(standaloneHtml),
+        mimeType: 'text/html;charset=utf-8',
+        filterName: 'HTML 页面',
+        extensions: ['html']
+      });
 
-    // 2. 若用户主动勾选附带侧车，延时调度触发第二项下载，防止 WKWebView 并发覆盖
-    if (includeManifest) {
-      setTimeout(() => {
+      if (htmlRes.status === 'canceled') {
+        setSaveResult({ ...htmlRes, label: 'HTML' });
+        return;
+      }
+
+      // 2. 侧车清单：紧随其后单独保存，用户可再次选定位置或取消 (BR-SAVE-04)
+      if (includeManifest) {
         const manifest = buildArtifactManifest(screen, settings);
-        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
-        downloadBlob(manifestBlob, `${screen?.name || 'design'}.manifest.json`);
-      }, 600);
+        await saveExportFile({
+          fileName: `${screen.name || 'design'}.manifest.json`,
+          bytes: textToBytes(JSON.stringify(manifest, null, 2)),
+          mimeType: 'application/json',
+          filterName: 'JSON 清单',
+          extensions: ['json']
+        });
+      }
+
+      setSaveResult({ ...htmlRes, label: 'HTML' });
+    } catch (err: any) {
+      setExportError(err?.message || 'HTML 保存失败');
+    } finally {
+      setIsSavingHtml(false);
     }
   };
 
@@ -89,6 +115,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
     setIsExportingPng(true);
     setExportError(null);
     setExportNotice(null);
+    setSaveResult(null);
 
     try {
       const bgColor = settings.colorMode === 'light'
@@ -107,7 +134,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         bgColor
       });
 
-      downloadDataUrl(outcome.dataUrl, `${screen.name || 'design'}_${pngScale}x.png`);
+      const pngRes = await saveExportFile({
+        fileName: `${screen.name || 'design'}_${pngScale}x.png`,
+        bytes: dataUrlToBytes(outcome.dataUrl),
+        mimeType: 'image/png',
+        filterName: 'PNG 图片',
+        extensions: ['png']
+      });
+      setSaveResult({ ...pngRes, label: `PNG ${pngScale}x` });
 
       if (outcome.engine !== 'native-webview-pdf') {
         setExportNotice(
@@ -164,6 +198,52 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto text-xs">
+          {saveResult && !exportError && (
+            saveResult.status === 'canceled' ? (
+              <div
+                data-testid="export-canceled-banner"
+                className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-400 flex items-center justify-between gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span>已取消保存，未写入任何文件。</span>
+                </div>
+                <button onClick={() => setSaveResult(null)} className="text-slate-500 hover:text-slate-300 text-sm leading-none px-1">
+                  ×
+                </button>
+              </div>
+            ) : (
+              <div
+                data-testid="export-success-banner"
+                className="p-3 bg-emerald-950/50 border border-emerald-800/70 rounded-xl text-xs text-emerald-300 space-y-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{saveResult.label} 已保存</span>
+                  </div>
+                  <button
+                    onClick={() => setSaveResult(null)}
+                    className="text-emerald-400 hover:text-emerald-200 text-sm leading-none px-1"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div
+                  className="font-mono text-[10px] text-emerald-400/80 break-all leading-relaxed"
+                  title={saveResult.path || saveResult.fileName}
+                >
+                  {saveResult.path || saveResult.fileName}
+                </div>
+                {saveResult.status === 'downloaded' && (
+                  <p className="text-[10px] text-emerald-400/70">
+                    当前为浏览器环境，文件已交由浏览器下载（通常在「下载」目录）。
+                  </p>
+                )}
+              </div>
+            )
+          )}
+
           {exportNotice && !exportError && (
             <div className="p-3 bg-amber-950/50 border border-amber-800/70 rounded-xl text-xs text-amber-300 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -340,10 +420,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             {exportType === 'html' ? (
               <button
                 onClick={handleDownloadHtml}
-                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-xs transition shadow"
+                disabled={isSavingHtml}
+                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>下载独立 HTML 文件</span>
+                {isSavingHtml ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>{isSavingHtml ? '等待选择保存位置...' : '保存独立 HTML 文件'}</span>
               </button>
             ) : (
               <button

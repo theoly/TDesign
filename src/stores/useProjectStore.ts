@@ -124,6 +124,22 @@ export interface ComputedLayoutInfo {
   gap?: string;
   rowGap?: string;
   columnGap?: string;
+
+  // 几何属性 (doc/feature/inspector-geometry-tabs)：
+  // 采集浏览器实际生效值，未设置 L4 覆盖时作为输入框占位提示 (BR-INS-06)
+  position?: string;
+  top?: string;
+  right?: string;
+  bottom?: string;
+  left?: string;
+  zIndex?: string;
+  width?: string;
+  height?: string;
+  borderRadius?: string;
+  borderTopLeftRadius?: string;
+  borderTopRightRadius?: string;
+  borderBottomRightRadius?: string;
+  borderBottomLeftRadius?: string;
 }
 
 export interface SelectedNodeInfo {

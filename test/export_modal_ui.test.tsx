@@ -62,7 +62,7 @@ describe('ExportModal UI Specification (ISSUE-024 / CHK-EXP-01 ~ CHK-EXP-05)', (
     expect(container.textContent).toContain('同时导出 Manifest 元数据侧车文件');
   });
 
-  it('CHK-EXP-01: clicking HTML download initiates downloading .html file without being overwritten by manifest', async () => {
+  it('CHK-EXP-01: 点击保存 HTML 只落一个 .html，不被 manifest 覆盖（浏览器环境退回下载）', async () => {
     const downloadedFiles: string[] = [];
 
     const originalAppendChild = document.body.appendChild.bind(document.body);
@@ -81,7 +81,7 @@ describe('ExportModal UI Specification (ISSUE-024 / CHK-EXP-01 ~ CHK-EXP-05)', (
 
       // 找到下载按钮并点击
       const downloadBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-        b.textContent?.includes('下载独立 HTML 文件')
+        b.textContent?.includes('保存独立 HTML 文件')
       );
       expect(downloadBtn).toBeDefined();
 
@@ -97,7 +97,7 @@ describe('ExportModal UI Specification (ISSUE-024 / CHK-EXP-01 ~ CHK-EXP-05)', (
     }
   });
 
-  it('CHK-EXP-02: when manifest checkbox is checked, both .html and .manifest.json are scheduled for download', async () => {
+  it('CHK-EXP-02: 勾选侧车后 .html 与 .manifest.json 依次落盘', async () => {
     const downloadedFiles: string[] = [];
 
     const originalAppendChild = document.body.appendChild.bind(document.body);
@@ -122,7 +122,7 @@ describe('ExportModal UI Specification (ISSUE-024 / CHK-EXP-01 ~ CHK-EXP-05)', (
       expect(manifestCheckbox.checked).toBe(true);
 
       const downloadBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-        b.textContent?.includes('下载独立 HTML 文件')
+        b.textContent?.includes('保存独立 HTML 文件')
       );
 
       await act(async () => {
@@ -132,11 +132,8 @@ describe('ExportModal UI Specification (ISSUE-024 / CHK-EXP-01 ~ CHK-EXP-05)', (
       // 立即触发 .html
       expect(downloadedFiles).toContain('会员中心 · 开通线下会员.html');
 
-      // 等待延时调度触发 .manifest.json
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 700));
-      });
-
+      // 侧车改为 HTML 保存完成后顺序保存，不再依赖 600ms 延时调度
+      // (doc/feature/export-save-dialog BR-SAVE-04)
       expect(downloadedFiles).toContain('会员中心 · 开通线下会员.manifest.json');
       expect(downloadedFiles.length).toBe(2);
     } finally {

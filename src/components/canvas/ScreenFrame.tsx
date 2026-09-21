@@ -216,7 +216,20 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
               flexWrap: style?.flexWrap || 'nowrap',
               gap: style?.gap || '0px',
               rowGap: style?.rowGap,
-              columnGap: style?.columnGap
+              columnGap: style?.columnGap,
+              position: style?.position,
+              top: style?.top,
+              right: style?.right,
+              bottom: style?.bottom,
+              left: style?.left,
+              zIndex: style?.zIndex,
+              width: style?.width,
+              height: style?.height,
+              borderRadius: style?.borderRadius,
+              borderTopLeftRadius: style?.borderTopLeftRadius,
+              borderTopRightRadius: style?.borderTopRightRadius,
+              borderBottomRightRadius: style?.borderBottomRightRadius,
+              borderBottomLeftRadius: style?.borderBottomLeftRadius
             }
           });
         }
@@ -363,7 +376,20 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
               flexWrap: style?.flexWrap || 'nowrap',
               gap: style?.gap || '0px',
               rowGap: style?.rowGap,
-              columnGap: style?.columnGap
+              columnGap: style?.columnGap,
+              position: style?.position,
+              top: style?.top,
+              right: style?.right,
+              bottom: style?.bottom,
+              left: style?.left,
+              zIndex: style?.zIndex,
+              width: style?.width,
+              height: style?.height,
+              borderRadius: style?.borderRadius,
+              borderTopLeftRadius: style?.borderTopLeftRadius,
+              borderTopRightRadius: style?.borderTopRightRadius,
+              borderBottomRightRadius: style?.borderBottomRightRadius,
+              borderBottomLeftRadius: style?.borderBottomLeftRadius
             }
           });
         }

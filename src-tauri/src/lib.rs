@@ -1,3 +1,4 @@
+mod export_save;
 mod png_export;
 mod project_fs;
 mod ssrf_guard;
@@ -180,7 +181,8 @@ pub fn run() {
             project_fs::project_read_binary,
             project_fs::project_list_dir,
             project_fs::project_delete,
-            png_export::export_screen_png
+            png_export::export_screen_png,
+            export_save::export_save_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
