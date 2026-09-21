@@ -2,7 +2,6 @@ dist/
 dist-desktop/
 doc/
 node_modules/
-scripts/
 spike/
 AGENTS.md
 bun.lock
@@ -13,3 +12,4 @@ bun.lock
 .gemini/
 GEMINI.md
 .mcp.json
+.DS_Store
