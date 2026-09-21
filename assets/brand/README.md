@@ -55,24 +55,18 @@
 
 ## 生成的图标
 
-`src-tauri/icons/` 下的全部图标均由本目录的 SVG 生成，**不要手工编辑那些 PNG**。
-改了 SVG 之后重新生成：
+`src-tauri/icons/` 下的全部图标与 `public/favicon.svg` 均由本目录的 SVG 生成，
+**不要手工编辑那些 PNG**。改了 SVG 之后重新生成：
 
 ```bash
-# macOS .icns（苹果比例版）
-mkdir -p /tmp/icon.iconset
-for s in 16:icon_16x16 32:icon_16x16@2x 32:icon_32x32 64:icon_32x32@2x \
-         128:icon_128x128 256:icon_128x128@2x 256:icon_256x256 \
-         512:icon_256x256@2x 512:icon_512x512 1024:icon_512x512@2x; do
-  rsvg-convert -w ${s%%:*} -h ${s%%:*} assets/brand/taudesign-icon-macos.svg -o /tmp/icon.iconset/${s##*:}.png
-done
-iconutil -c icns /tmp/icon.iconset -o src-tauri/icons/icon.icns
-
-# 通用 PNG 与 Windows 图标（满版）
-rsvg-convert -w 32  -h 32  assets/brand/taudesign-mark.svg -o src-tauri/icons/32x32.png
-rsvg-convert -w 128 -h 128 assets/brand/taudesign-mark.svg -o src-tauri/icons/128x128.png
-rsvg-convert -w 256 -h 256 assets/brand/taudesign-mark.svg -o src-tauri/icons/128x128@2x.png
-rsvg-convert -w 512 -h 512 assets/brand/taudesign-mark.svg -o src-tauri/icons/icon.png
+bash scripts/gen-icons.sh
 ```
 
-依赖 `rsvg-convert`（`brew install librsvg`）与 `magick`（`brew install imagemagick`，用于 `.ico`）。
+脚本按用途分流：`.icns` 用苹果比例版（Dock 里才和邻居等大），
+Windows、Linux 与 favicon 用满版。
+
+> ⚠️ 不要用 `magick a.png b.png ... out.ico` 组装 `.ico`——ImageMagick 会把各帧
+> 存成未压缩位图，同样内容能从 12KB 膨胀到 300KB。脚本里按 ICO 规范手工组装，
+> payload 直接放 PNG 字节。
+
+依赖：`rsvg-convert`（`brew install librsvg`）、`iconutil`（macOS 自带，仅 `.icns` 需要）、`python3`（组装 `.ico`）。
