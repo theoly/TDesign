@@ -5,7 +5,6 @@ import { supportsVision } from '../../services/ai/engine/core/multimodalGuard';
 import { useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
 import {
   useAIEngineChat,
-  hasExplicitModifyIntent,
   parseReferencedElement,
   extractCleanUserPrompt
 } from '../../services/ai/engine/react/useAIEngineChat';
@@ -343,10 +342,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }, 50);
 
-    let referencedScreenId = isPageReferenced ? activeScreenId : null;
-    if (!referencedScreenId && activeScreenId && hasExplicitModifyIntent(textToSend)) {
-      referencedScreenId = activeScreenId;
-    }
+    // 引用与否只由用户显式操作决定：开关点亮 / @提及 / 元素引用。
+    // 「命中修改词就偷偷把活跃画框当引用」是误改现有页面的根源，已移除 (BR-GT-02)。
+    const referencedScreenId = isPageReferenced ? activeScreenId : null;
 
     const referencedElementInfo = nodeRef
       ? {
@@ -358,6 +356,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
     await engine.sendMessage(textToSend, currentAttachment, {
       referencedScreenId,
+      // 活跃画框单独传递：仅当用户明确说「修改」时才作为落点 (BR-GT-03)
+      activeScreenId,
       referencedElement: referencedElementInfo,
       displayText: rawPrompt || input.trim()
     });
@@ -600,7 +600,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-                    <span>AI Designer</span>
+                    <span>TDesign</span>
                   </>
                 )}
               </div>
@@ -943,7 +943,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           ) : m.referencedScreen ? (
                             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-700/80 border border-blue-400/40 rounded-lg text-[11px] text-blue-100 font-medium select-none shadow-xs">
                               <AtSign className="w-3 h-3 text-blue-200 flex-shrink-0" />
-                              <span>引用画框: <span className="font-semibold text-white">@{m.referencedScreen.name}</span></span>
+                              {m.referencedScreen.viaActiveScreen ? (
+                                <span>作用于当前画框: <span className="font-semibold text-white">{m.referencedScreen.name}</span></span>
+                              ) : (
+                                <span>引用画框: <span className="font-semibold text-white">@{m.referencedScreen.name}</span></span>
+                              )}
                             </div>
                           ) : null}
 
@@ -1015,6 +1019,25 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               >
                                 <span>定位画框</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          ) : m.isGuardRejected ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-1.5 text-amber-400 font-medium text-[11px]">
+                                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>结构守卫已拦截本次覆盖，尚未写入画框</span>
+                              </div>
+                              <div className="text-[11px] text-amber-300/80 leading-relaxed">
+                                {m.text || '检测到原有结构存在较大变动，为防止误删已暂缓覆盖。'}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => engine.forceApply(m.htmlOutput, m.id)}
+                                className="w-full px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
+                                title={`放行并直接覆盖更新「${m.preActionSnapshot?.screenName || displayTitle}」`}
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span>强制放行并覆盖更新原画框</span>
                               </button>
                             </div>
                           ) : (
@@ -1176,7 +1199,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
-                            onClick={() => engine.forceApply(m.htmlOutput)}
+                            onClick={() => engine.forceApply(m.htmlOutput, m.id)}
                             className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer shadow"
                             title="放行并直接合入本次生成的页面或元素修改"
                           >

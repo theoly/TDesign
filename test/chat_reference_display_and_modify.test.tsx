@@ -187,7 +187,9 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       expect(chatText).not.toContain('元素片段:');
     });
 
-    test('未手动开启引用开关时发送“按附件图片精准修改页面”，自动绑定活跃画框', async () => {
+    // BR-GT-03/07 调整：未开引用 + 明确修改口令 → 仍落到当前激活画框，
+    // 但气泡如实标注「作用于当前画框」，不再谎报为用户引用。
+    test('未手动开启引用开关时发送“按附件图片精准修改页面”，落到当前激活画框并如实标注', async () => {
       let executedScreenId: string | null = null;
 
       PipelineExecutor.execute = (async (args: any) => {
@@ -230,10 +232,11 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       // 验证：虽然开关未手动开启，但显式修改指令自动将 activeScreenId 注入管道
       expect(executedScreenId).toBe(screenId);
 
-      // 用户气泡中应呈现画框引用标记
+      // 用户气泡如实区分：这是「作用于当前画框」，不是用户主动引用
       const chatText = container.textContent || '';
-      expect(chatText).toContain('引用画框');
-      expect(chatText).toContain('@测试页面');
+      expect(chatText).toContain('作用于当前画框');
+      expect(chatText).toContain('测试页面');
+      expect(chatText).not.toContain('引用画框: @测试页面');
     });
 
     test('CHK-F-06 & CHK-F-08: 显式修改指令直接更新画框内容，绝不新建画框，气泡准确提示已更新', async () => {

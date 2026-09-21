@@ -19,6 +19,11 @@ export interface ContextEnricherParams {
   decisions?: Array<{ id: string; rule: string; rationale: string }>; // PRD D20
   presetId?: string;
   projectProseMarkdown?: string;
+  /**
+   * 上游裁决的目标画框 (BR-GT-06)。传入 `{ id }` 即锁定目标；传入 `{ id: null }`
+   * 表示本轮明确不针对任何现有画框，富化器不得再自行推断或兜底绑定。
+   */
+  targetScreenOverride?: { id: string | null };
 }
 
 export interface EnrichedContextResult {
@@ -50,7 +55,8 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
     designRules = [],
     decisions = [],
     presetId,
-    projectProseMarkdown
+    projectProseMarkdown,
+    targetScreenOverride
   } = params;
 
   // 1. Resolve mentions (ISSUE-012 fix)
@@ -59,8 +65,14 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
   // 2. Identify target screen if modify_screen (ISSUE-011 fix)
   let targetScreenId = activeScreenId;
 
+  // 2.0 上游已裁决目标画框：直接采信，跳过全部推断与兜底 (BR-GT-06)
+  const hasOverride = Boolean(targetScreenOverride);
+  if (hasOverride) {
+    targetScreenId = targetScreenOverride!.id;
+  }
+
   // 2.1 尝试从 [引用元素 ... 画框="xxx" ...] 中提取目标画框
-  const screenNameMatch = rawPrompt.match(/画框="([^"]+)"/);
+  const screenNameMatch = hasOverride ? null : rawPrompt.match(/画框="([^"]+)"/);
   if (screenNameMatch) {
     const matchedName = screenNameMatch[1].trim();
     const foundEntry = Object.entries(screens).find(([, s]) => s.name === matchedName);
@@ -72,7 +84,7 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
   // 2.2 尝试从 nid="xxx" 中按内容反向检索目标画框
   const nidMatch = rawPrompt.match(/nid="([^"]+)"/);
   const elementNid = nidMatch ? nidMatch[1].trim() : null;
-  if (!targetScreenId && elementNid) {
+  if (!hasOverride && !targetScreenId && elementNid) {
     const foundEntry = Object.entries(screens).find(([, s]) => s.htmlContent.includes(`data-nid="${elementNid}"`));
     if (foundEntry) {
       targetScreenId = foundEntry[0];
@@ -80,7 +92,7 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
   }
 
   // 2.3 尝试从提示词中精准匹配已有画框全名
-  if (!targetScreenId) {
+  if (!hasOverride && !targetScreenId) {
     const sorted = Object.entries(screens).sort(([, a], [, b]) => b.name.length - a.name.length);
     for (const [sId, s] of sorted) {
       if (s.name && s.name.length >= 2 && rawPrompt.includes(s.name)) {
@@ -90,8 +102,9 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
     }
   }
 
-  // 2.4 若仍未匹配，但当前为修改意图且存在画框，自动绑定首个画框，确保注入上下文
-  if (!targetScreenId && Object.keys(screens).length > 0 && intent === 'modify_screen') {
+  // 2.4 若仍未匹配，但当前为修改意图且存在画框，自动绑定首个画框，确保注入上下文。
+  //     上游已裁决时不得兜底——「没引用就别改现有页」的底线在此 (BR-GT-05)
+  if (!hasOverride && !targetScreenId && Object.keys(screens).length > 0 && intent === 'modify_screen') {
     targetScreenId = Object.keys(screens)[0];
   }
 

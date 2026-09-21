@@ -1,3 +1,4 @@
+mod png_export;
 mod project_fs;
 mod ssrf_guard;
 
@@ -134,6 +135,27 @@ async fn proxy_stream_request(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 高保真导出：离屏窗口通过该协议加载自包含 HTML (doc/feature/high-fidelity-png-export)
+        .register_uri_scheme_protocol(png_export::EXPORT_SCHEME, |_ctx, request| {
+            let token = request.uri().path().trim_start_matches('/').to_string();
+            match png_export::get_html(&token) {
+                Some(html) => tauri::http::Response::builder()
+                    .status(200)
+                    .header("Content-Type", "text/html; charset=utf-8")
+                    .header("Cache-Control", "no-store")
+                    .body(html.into_bytes())
+                    .unwrap_or_else(|_| {
+                        tauri::http::Response::builder()
+                            .status(500)
+                            .body(Vec::new())
+                            .expect("empty response")
+                    }),
+                None => tauri::http::Response::builder()
+                    .status(404)
+                    .body(Vec::new())
+                    .expect("empty response"),
+            }
+        })
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -157,7 +179,8 @@ pub fn run() {
             project_fs::project_write_binary,
             project_fs::project_read_binary,
             project_fs::project_list_dir,
-            project_fs::project_delete
+            project_fs::project_delete,
+            png_export::export_screen_png
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

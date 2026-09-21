@@ -5,10 +5,11 @@ import { useHistoryStore } from '../../../../stores/useHistoryStore';
 import { PipelineExecutor } from '../pipeline/executor';
 import { PipelineOutput } from '../pipeline/types';
 import { createAIEngineCore, supportsVision } from '../core';
-import { classifyIntent } from '../../intentClassifier';
+import { resolveGenerationTarget } from '../../generationTargetResolver';
 import { StructureDiff } from '../../../../utils/structureGuard';
 import { CanvasToolExecutor } from '../../../tools/canvasToolExecutor';
 import { resolveToolFromAIResponse } from '../../../tools/toolResolver';
+import { resolveApplyToolCall } from '../../../tools/applyTargetResolver';
 import { ScreenAuditReport } from '../../../../utils/tokenLint';
 
 export interface ChatMessageItem {
@@ -19,6 +20,8 @@ export interface ChatMessageItem {
   referencedScreen?: {
     id: string;
     name: string;
+    /** 目标并非用户显式引用，而是「明确要求修改」时落到的当前激活画框 (BR-GT-07) */
+    viaActiveScreen?: boolean;
   };
   referencedElement?: {
     nid: string;
@@ -42,6 +45,8 @@ export interface ChatMessageItem {
   candidateDecision?: string;
   decisionConfirmed?: boolean;
   isError?: boolean;
+  /** 本轮被结构守卫拦截，尚未落地任何画框 (BR-GRM-04) */
+  isGuardRejected?: boolean;
   auditReport?: ScreenAuditReport;
   preActionSnapshot?: {
     screenId: string;
@@ -49,6 +54,13 @@ export interface ChatMessageItem {
     htmlContent: string;
   };
   originalUserPrompt?: string;
+  /** 本轮的生成目标裁决，挂载与强制放行复用它，避免二次推断 (BR-GT-06) */
+  originalDecision?: {
+    action: 'create_screen' | 'modify_screen' | 'patch_element';
+    targetScreenId: string | null;
+    styleReferenceScreenId: string | null;
+    elementNid: string | null;
+  };
   originalAttachment?: { name: string; dataUrl: string };
   originalReferencedScreenId?: string | null;
   usage?: {
@@ -59,7 +71,10 @@ export interface ChatMessageItem {
 }
 
 export interface SendMessageOptions {
+  /** 引用开关点亮的画框；未点亮传 null (BR-GT-02) */
   referencedScreenId?: string | null;
+  /** 画布激活画框；仅在用户明确说「修改」时才作为落点 (BR-GT-03) */
+  activeScreenId?: string | null;
   referencedElement?: {
     nid: string;
     tagName: string;
@@ -275,69 +290,42 @@ export function useAIEngineChat() {
     const textToSend = rawPrompt.trim();
     if (!textToSend || isGenerating) return;
 
-    // 确定当前生效的引用画框 ID：
-    let effectiveScreenId: string | null = null;
-    if (options && 'referencedScreenId' in options && options.referencedScreenId) {
-      effectiveScreenId = options.referencedScreenId;
-    }
+    // 生成目标单一裁决点 (BR-GT-06)：引用判定与动作判定只在这里做一次，
+    // 下游 intentInterceptor / contextEnricher / toolResolver 全部消费该结果。
+    const decision = resolveGenerationTarget({
+      rawPrompt: textToSend,
+      screens,
+      referenceToggleScreenId:
+        options && 'referencedScreenId' in options ? options.referencedScreenId : undefined,
+      activeScreenId: options?.activeScreenId !== undefined ? options.activeScreenId : activeScreenId,
+      elementRef: options?.referencedElement
+        ? { nid: options.referencedElement.nid, screenName: options.referencedElement.screenName }
+        : null
+    });
 
-    // 若未显式传入有效引用，但用户输入中包含 @画框名，解析并绑定对应画框
-    if (!effectiveScreenId && textToSend.includes('@')) {
-      const match = Object.values(screens).find((s) => textToSend.includes(`@${s.name}`));
-      if (match) {
-        effectiveScreenId = match.id;
-      }
-    }
-
-    // 检查提示词是否直接提及了画框全称（支持不带 @ 的自然语言）
-    if (!effectiveScreenId) {
-      const sortedScreens = Object.values(screens).sort((a, b) => b.name.length - a.name.length);
-      for (const s of sortedScreens) {
-        if (s.name && s.name.length >= 2 && textToSend.includes(s.name)) {
-          effectiveScreenId = s.id;
-          break;
+    // 明确要求修改却无处可落：停手并引导，绝不改第一个画框也绝不静默新建 (BR-GT-03)
+    if (decision.action === 'needs_reference') {
+      setMessages((prev) => [
+        ...prev,
+        { id: `usr_${Date.now()}`, sender: 'user', text: textToSend, imageUrl: attachment?.dataUrl },
+        {
+          id: `warn_${Date.now()}`,
+          sender: 'assistant',
+          text:
+            '你要求修改页面，但当前既没有引用任何画框，也没有处于激活状态的画框。\n\n' +
+            '为避免误改到不相干的页面，本次未做任何改动。请任选一种方式指明目标：\n' +
+            '1. 在输入框下方点亮【引用画框】开关；\n' +
+            '2. 在诉求里用 @画框名 指明目标；\n' +
+            '3. 先在画布上点选要修改的画框。'
         }
-      }
+      ]);
+      return;
     }
 
-    // 若依然未绑定，且包含元素引用，从元素引用元数据或对应画框解析
-    if (!effectiveScreenId && textToSend.includes('[引用元素')) {
-      const refElem = parseReferencedElement(textToSend);
-      if (refElem?.screenName) {
-        const match = Object.values(screens).find((s) => s.name === refElem.screenName);
-        if (match) effectiveScreenId = match.id;
-      }
-      if (!effectiveScreenId && activeScreenId && screens[activeScreenId]) {
-        effectiveScreenId = activeScreenId;
-      }
-    }
-
-    // 若用户诉求包含显式修改意图（如“按附件图片精准修改页面”），优先自动绑定目标画框，绝不静默留空
-    if (!effectiveScreenId && hasExplicitModifyIntent(textToSend)) {
-      if (activeScreenId && screens[activeScreenId]) {
-        effectiveScreenId = activeScreenId;
-      } else {
-        const store = useProjectStore.getState();
-        if (store.activeScreenId && store.screens[store.activeScreenId]) {
-          effectiveScreenId = store.activeScreenId;
-        } else if (store.screenOrder.length > 0 && store.screens[store.screenOrder[0]]) {
-          effectiveScreenId = store.screenOrder[0];
-        } else if (Object.keys(screens).length > 0) {
-          effectiveScreenId = Object.keys(screens)[0];
-        }
-      }
-    }
-
-    // 若非显式修改意图且 options 传入了 null，才维持 null
-    if (!effectiveScreenId && options && 'referencedScreenId' in options && !options.referencedScreenId) {
-      if (!hasExplicitModifyIntent(textToSend)) {
-        effectiveScreenId = null;
-      }
-    }
+    const effectiveScreenId = decision.targetScreenId;
 
     // 意图预判：问答咨询走 chat 模型，页面代码生成与修改走 code 模型
-    const intentResult = classifyIntent(textToSend, Boolean(effectiveScreenId));
-    const isQuestion = intentResult.intent === 'question';
+    const isQuestion = decision.action === 'question';
     const primaryRole = isQuestion
       ? getActiveProviderForRole('chat') || getActiveProviderForRole('code')
       : getActiveProviderForRole('code') || getActiveProviderForRole('chat');
@@ -423,9 +411,14 @@ export function useAIEngineChat() {
 
     const referencedElement =
       options?.referencedElement || parseReferencedElement(textToSend) || undefined;
+    // 徽章如实区分「用户引用」与「落到当前画框」，不再把自动落点谎报为引用 (BR-GT-07)
     const referencedScreen =
       effectiveScreenId && screens[effectiveScreenId]
-        ? { id: effectiveScreenId, name: screens[effectiveScreenId].name }
+        ? {
+            id: effectiveScreenId,
+            name: screens[effectiveScreenId].name,
+            viaActiveScreen: decision.referenceSource === 'active_screen'
+          }
         : undefined;
     const cleanDisplayPrompt =
       options?.displayText || extractCleanUserPrompt(textToSend);
@@ -450,7 +443,13 @@ export function useAIEngineChat() {
         preActionSnapshot: preSnapshot,
         originalUserPrompt: textToSend,
         originalAttachment: attachment,
-        originalReferencedScreenId: effectiveScreenId
+        originalReferencedScreenId: effectiveScreenId,
+        originalDecision: {
+          action: decision.action === 'create_screen' ? 'create_screen' : decision.action === 'patch_element' ? 'patch_element' : 'modify_screen',
+          targetScreenId: decision.targetScreenId,
+          styleReferenceScreenId: decision.styleReferenceScreenId,
+          elementNid: decision.elementNid
+        }
       }
     ]);
 
@@ -487,7 +486,19 @@ export function useAIEngineChat() {
         input: {
           rawPrompt: textToSend,
           attachment,
-          activeScreenId: effectiveScreenId
+          activeScreenId: effectiveScreenId,
+          decision: {
+            intent:
+              decision.action === 'question' || decision.action === 'change_theme'
+                ? decision.action
+                : decision.action === 'create_screen'
+                ? 'create_screen'
+                : 'modify_screen',
+            targetScreenId: decision.targetScreenId,
+            styleReferenceScreenId: decision.styleReferenceScreenId,
+            elementNid: decision.elementNid,
+            reason: decision.reason
+          }
         },
         provider: activeRole.provider,
         model: activeRole.modelId,
@@ -550,6 +561,7 @@ export function useAIEngineChat() {
                   isGenerating: false,
                   elapsedSeconds,
                   structureDiff: output.structureDiff,
+                  isGuardRejected: true,
                   htmlOutput: output.extractedHtml,
                   text: `⚠️ ${output.errorMessage}\n\n为保护已有布局不被误删，已自动拦截直接覆盖。若确认这是你的本意，可点击下方【强制应用】放行。`
                 }
@@ -587,7 +599,13 @@ export function useAIEngineChat() {
         activeScreenId: effectiveScreenId,
         screens: useProjectStore.getState().screens,
         extractedHtml: output.extractedHtml,
-        artifactMetadata: output.artifactMetadata
+        artifactMetadata: output.artifactMetadata,
+        decision: {
+          intent: decision.action === 'create_screen' ? 'create_screen' : 'modify_screen',
+          targetScreenId: decision.targetScreenId,
+          styleReferenceScreenId: decision.styleReferenceScreenId,
+          elementNid: decision.elementNid
+        }
       });
 
       let toolAction: 'created' | 'modified' | 'patched' | undefined;
@@ -692,27 +710,92 @@ export function useAIEngineChat() {
     }
   };
 
-  const forceApply = (specificHtml?: string) => {
-    const htmlToApply = specificHtml || lastGuardOutput?.extractedHtml;
-    if (!htmlToApply) return;
-    const targetScreenId = activeScreenId || (Object.keys(screens).length > 0 ? Object.keys(screens)[0] : null);
-    if (!targetScreenId) return;
+  /** 裁决并落地一段已生成 HTML，目标画框由 resolveApplyToolCall 统一判定 (BR-GRM-02 / BR-GRM-03) */
+  const applyHtmlToTarget = (
+    msg: ChatMessageItem | undefined,
+    htmlToApply: string,
+    fallbackScreenId?: string | null,
+    createTitle?: string
+  ) => {
+    const userPrompt = msg?.originalUserPrompt || '';
+    const storeScreens = useProjectStore.getState().screens;
 
-    const toolCall = resolveToolFromAIResponse({
-      rawResponse: htmlToApply,
-      userPrompt: lastGuardOutput?.rawResponse || '',
-      activeScreenId: targetScreenId,
-      screens,
-      extractedHtml: htmlToApply
+    // 本轮已有裁决时直接沿用，挂载与强制放行都不得重新推断落点 (BR-GT-06)
+    const decided = msg?.originalDecision;
+    if (decided) {
+      const target = decided.targetScreenId && storeScreens[decided.targetScreenId]
+        ? storeScreens[decided.targetScreenId]
+        : null;
+      if (decided.action !== 'create_screen' && target) {
+        return CanvasToolExecutor.execute({
+          tool: 'modify_screen',
+          params: { screenId: target.id, title: target.name, html: htmlToApply }
+        });
+      }
+      if (decided.action === 'create_screen') {
+        return CanvasToolExecutor.execute({
+          tool: 'create_screen',
+          params: {
+            title: createTitle || msg?.screenName || '新设计页',
+            html: htmlToApply,
+            referencedScreenId: decided.styleReferenceScreenId || undefined
+          }
+        });
+      }
+    }
+
+    const toolCall = resolveApplyToolCall({
+      html: htmlToApply,
+      userPrompt,
+      screens: storeScreens,
+      referencedScreenId: msg?.originalReferencedScreenId,
+      snapshotScreenId: msg?.preActionSnapshot?.screenId,
+      fallbackScreenId,
+      isGuardRejected: msg?.isGuardRejected,
+      isModifyIntent: hasExplicitModifyIntent(userPrompt),
+      createTitle
     });
 
-    if (toolCall) {
-      CanvasToolExecutor.execute(toolCall);
-    } else {
+    return toolCall ? CanvasToolExecutor.execute(toolCall) : null;
+  };
+
+  const forceApply = (specificHtml?: string, msgId?: string) => {
+    const sourceMsg = msgId
+      ? messages.find((m) => m.id === msgId)
+      : [...messages].reverse().find((m) => m.isGuardRejected);
+    const htmlToApply = specificHtml || sourceMsg?.htmlOutput || lastGuardOutput?.extractedHtml;
+    if (!htmlToApply) return;
+
+    const fallbackScreenId =
+      activeScreenId || (Object.keys(screens).length > 0 ? Object.keys(screens)[0] : null);
+    const result = applyHtmlToTarget(sourceMsg, htmlToApply, fallbackScreenId);
+
+    if (!result || !result.success) {
+      if (!fallbackScreenId) return;
       stageScreenChange(
-        targetScreenId,
+        fallbackScreenId,
         htmlToApply,
-        `${screens[targetScreenId]?.name || '画框'} (强制应用)`
+        `${screens[fallbackScreenId]?.name || '画框'} (强制应用)`
+      );
+    } else if (sourceMsg) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === sourceMsg.id
+            ? {
+                ...m,
+                isGuardRejected: false,
+                screenId: result.screenId,
+                screenName: result.screenName,
+                checkpointId: result.checkpointId,
+                toolAction:
+                  result.tool === 'create_screen'
+                    ? 'created'
+                    : result.tool === 'patch_element'
+                    ? 'patched'
+                    : 'modified'
+              }
+            : m
+        )
       );
     }
     setLastGuardOutput(null);
@@ -757,20 +840,31 @@ export function useAIEngineChat() {
     const target = messages.find((m) => m.id === msgId);
     if (!target?.htmlOutput) return;
 
-    const screenName = target.screenName || '画框 (AI 补挂)';
-    const result = CanvasToolExecutor.execute({
-      tool: 'create_screen',
-      params: {
-        title: screenName,
-        html: target.htmlOutput
-      }
-    });
+    // 先按该轮的引用画框与用户诉求裁决落点，仅无目标可循时才新建 (BR-GRM-02)
+    const result = applyHtmlToTarget(
+      target,
+      target.htmlOutput,
+      null,
+      target.screenName || '画框 (AI 补挂)'
+    );
 
-    if (result.success) {
+    if (result?.success) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === msgId
-            ? { ...m, screenId: result.screenId, screenName: result.screenName, checkpointId: result.checkpointId }
+            ? {
+                ...m,
+                isGuardRejected: false,
+                screenId: result.screenId,
+                screenName: result.screenName,
+                checkpointId: result.checkpointId,
+                toolAction:
+                  result.tool === 'create_screen'
+                    ? 'created'
+                    : result.tool === 'patch_element'
+                    ? 'patched'
+                    : 'modified'
+              }
             : m
         )
       );

@@ -6,6 +6,17 @@ export interface PipelineInput {
   attachment?: { name: string; dataUrl: string };
   activeScreenId: string | null;
   styleTagIds?: string[];
+  /**
+   * 上游 `resolveGenerationTarget` 一次性裁决的生成目标 (BR-GT-06)。
+   * 传入后流水线不再自行推断意图与目标画框——这是「同一件事只判一次」的落点。
+   */
+  decision?: {
+    intent: PipelineIntent;
+    targetScreenId: string | null;
+    styleReferenceScreenId?: string | null;
+    elementNid?: string | null;
+    reason: string;
+  };
 }
 
 export type PipelineIntent = 'create_screen' | 'modify_screen' | 'change_theme' | 'question';

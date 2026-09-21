@@ -7,6 +7,17 @@ export interface GuardCheckResult {
   reason?: string;
 }
 
+/** 显式「按参考图重绘整页」口令，命中即视为用户已授权结构变动 (BR-GRM-01) */
+const IMAGE_REWRITE_KEYWORDS = [
+  '按附件图片精准修改',
+  '按附件图片修改',
+  '按附件图精准修改',
+  '按图精准修改',
+  '按图修改',
+  '精准修改',
+  '按参考图修改'
+];
+
 export function checkStructureIntegrity(
   context: PipelineContext,
   generatedHtml: string
@@ -21,6 +32,14 @@ export function checkStructureIntegrity(
     return {
       passed: true,
       reason: '用户针对特定元素进行针对性修改/填充，结构守卫自动放行'
+    };
+  }
+
+  // 1.5 用户上传参考图并显式要求「按图精准修改」，整页按图重绘即为其本意，守卫放行 (BR-GRM-01)
+  if (context.input.attachment && IMAGE_REWRITE_KEYWORDS.some((kw) => prompt.includes(kw))) {
+    return {
+      passed: true,
+      reason: '用户携带参考图并显式要求按图精准修改整页，结构守卫自动放行'
     };
   }
 

@@ -9,6 +9,28 @@ export interface ToolResolutionContext {
   screens: Record<string, { id: string; name: string; htmlContent: string }>;
   extractedHtml?: string;
   artifactMetadata?: { identifier?: string; title?: string };
+  /**
+   * 上游 `resolveGenerationTarget` 的裁决 (BR-GT-06)。传入后本解析器只负责
+   * 「整页 or 局部片段」的形态判断，不再用关键词二次推断动作与目标画框。
+   */
+  decision?: {
+    intent: 'create_screen' | 'modify_screen';
+    targetScreenId: string | null;
+    styleReferenceScreenId?: string | null;
+    elementNid?: string | null;
+  };
+}
+
+/**
+ * 模型输出是「局部元素片段」还是「整页重写」：
+ * 不含根容器，且要么带上了该元素的 nid、要么短到不可能是整页
+ */
+function isPartialElementFragment(html: string, nid: string): boolean {
+  return (
+    !html.includes('<main') &&
+    !html.includes('<body') &&
+    (html.includes(`data-nid="${nid}"`) || html.length < 500)
+  );
 }
 
 /**
@@ -20,10 +42,46 @@ export interface ToolResolutionContext {
 export function resolveToolFromAIResponse(
   context: ToolResolutionContext
 ): CanvasToolCall | null {
-  const { userPrompt, activeScreenId, screens, extractedHtml, artifactMetadata } = context;
+  const { userPrompt, activeScreenId, screens, extractedHtml, artifactMetadata, decision } = context;
 
   if (!extractedHtml) {
     return null;
+  }
+
+  // 0. 上游已裁决：直接落地，绝不再猜 (BR-GT-06)
+  if (decision) {
+    const target = decision.targetScreenId && screens[decision.targetScreenId]
+      ? screens[decision.targetScreenId]
+      : null;
+
+    if (decision.intent === 'modify_screen' && target) {
+      if (decision.elementNid && isPartialElementFragment(extractedHtml, decision.elementNid)) {
+        return {
+          tool: 'patch_element',
+          params: { screenId: target.id, nid: decision.elementNid, elementHtml: extractedHtml }
+        };
+      }
+      return {
+        tool: 'modify_screen',
+        params: { screenId: target.id, title: target.name, html: extractedHtml }
+      };
+    }
+
+    return {
+      tool: 'create_screen',
+      params: {
+        title: sanitizeScreenTitle(artifactMetadata?.title || '新设计页'),
+        html: extractedHtml,
+        screenId:
+          artifactMetadata?.identifier &&
+          artifactMetadata.identifier !== 'screen_new' &&
+          artifactMetadata.identifier !== 'screen_default' &&
+          !screens[artifactMetadata.identifier]
+            ? artifactMetadata.identifier
+            : undefined,
+        referencedScreenId: decision.styleReferenceScreenId || undefined
+      }
+    };
   }
 
   // 1. 强特征优先：检测用户是否附带了元素引用 (BR-CT-01)
@@ -49,13 +107,7 @@ export function resolveToolFromAIResponse(
 
     if (targetScreenId && screens[targetScreenId]) {
       // 区分是整页重构还是局部元素片段
-      // 如果模型输出包含该 nid 本身或完整的独立片段，且不包含根容器 main/body
-      const isPartialFragment =
-        !extractedHtml.includes('<main') &&
-        !extractedHtml.includes('<body') &&
-        (extractedHtml.includes(`data-nid="${targetNid}"`) || extractedHtml.length < 500);
-
-      if (isPartialFragment) {
+      if (isPartialElementFragment(extractedHtml, targetNid)) {
         return {
           tool: 'patch_element',
           params: {

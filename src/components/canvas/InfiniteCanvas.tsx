@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
-import { useHistoryStore } from '../../stores/useHistoryStore';
+import { handleHistoryShortcut } from '../../utils/historyShortcuts';
 import { ScreenFrame } from './ScreenFrame';
 import { Check, Copy, Map, Plus, Sparkles, X } from 'lucide-react';
 
@@ -47,14 +47,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       }
 
       // Cmd+Z / Cmd+Shift+Z (Undo / Redo)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          useHistoryStore.getState().redo();
-        } else {
-          useHistoryStore.getState().undo();
-        }
-      }
+      handleHistoryShortcut(e);
 
       // Cmd+0: Reset zoom to 100%
       if ((e.metaKey || e.ctrlKey) && e.key === '0') {

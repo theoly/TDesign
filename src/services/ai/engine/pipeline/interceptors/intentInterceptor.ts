@@ -19,8 +19,11 @@ export function analyzePipelineIntent(
   input: PipelineInput,
   currentTokens?: any
 ): IntentAnalysisResult {
-  const classified = classifyIntent(input.rawPrompt, Boolean(input.activeScreenId));
   const rawLower = input.rawPrompt.toLowerCase();
+  // 上游已裁决时直接采信，杜绝流水线内再判一次导致的意图漂移 (BR-GT-06)
+  const classified = input.decision
+    ? { intent: input.decision.intent, reason: input.decision.reason }
+    : classifyIntent(input.rawPrompt, Boolean(input.activeScreenId));
 
   const hasElementRef = input.rawPrompt.includes('[引用元素') || input.rawPrompt.includes('nid=');
   const hasExplicitStructuralChangeIntent = hasElementRef || STRUCTURAL_CHANGE_KEYWORDS.some((kw) =>

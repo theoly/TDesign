@@ -97,7 +97,8 @@ export class PipelineExecutor {
       baseSystemPrompt: systemPrompt,
       attachment: input.attachment,
       designRules,
-      decisions
+      decisions,
+      targetScreenOverride: input.decision ? { id: input.decision.targetScreenId } : undefined
     });
 
     const pipelineContext: PipelineContext = {

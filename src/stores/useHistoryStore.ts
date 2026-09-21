@@ -13,6 +13,8 @@ interface HistoryState {
   undo: () => HistoryEntry | null;
   redo: () => HistoryEntry | null;
   clear: () => void;
+  /** 从归档恢复整条历史（工程打开时调用，传 null 表示以空栈启动） */
+  restore: (snapshot: { past: HistoryEntry[]; future: HistoryEntry[]; checkpoints: Checkpoint[] } | null) => void;
 
   // D17 / §3.8.4 Checkpoint API
   addCheckpoint: (label: string, screenSnapshot: Checkpoint['screenSnapshot']) => string;
@@ -77,6 +79,13 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   clear: () => set({ past: [], future: [] }),
+
+  restore: (snapshot) =>
+    set({
+      past: snapshot?.past ?? [],
+      future: snapshot?.future ?? [],
+      checkpoints: snapshot?.checkpoints ?? []
+    }),
 
   addCheckpoint: (label: string, screenSnapshot: Checkpoint['screenSnapshot']) => {
     const id = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;

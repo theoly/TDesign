@@ -1,27 +1,35 @@
-# AI Designer Studio · 智能原型与设计工作台
+# TDesign · 智能原型与设计工作台 / Intelligent Prototype & Design Studio
 
 <p align="center">
-  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="AI Designer Studio Overview" width="920" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.35);" />
+  <img src="doc/archive/screenshots/studio_feature_complete.png" alt="TDesign Overview" width="920" style="border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.35);" />
 </p>
 
 <p align="center">
-  <strong>用自然语言创造专业级交互原型 · 人人皆可使用的 AI 原生高保真设计工具</strong>
+  <strong>用自然语言创造专业级交互原型 · 人人皆可使用的 AI 原生高保真设计工具</strong><br>
+  <strong>Create production-grade interactive prototypes with natural language · An AI-first high-fidelity design tool for everyone</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/运行平台-macOS%20%7C%20Windows%20%7C%20Linux-blue?logo=apple" alt="Platform" />
-  <img src="https://img.shields.io/badge/数据架构-100%25%20本地优先%20(Local--First)-emerald" alt="Local First" />
-  <img src="https://img.shields.io/badge/原型交付-自包含可交互%20HTML%20%2F%20超清长图-indigo" alt="Export" />
-  <img src="https://img.shields.io/badge/模型支持-DeepSeek%20%7C%20OpenAI%20%7C%20Claude%20%7C%20Ollama-orange" alt="Models" />
+  <a href="#-简体中文">简体中文</a> &nbsp;|&nbsp; <a href="#-english">English</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?logo=apple" alt="Platform" />
+  <img src="https://img.shields.io/badge/Architecture-100%25%20Local--First-emerald" alt="Local First" />
+  <img src="https://img.shields.io/badge/Export-Self--Contained%20HTML%20%2F%20Retina%20PNG-indigo" alt="Export" />
+  <img src="https://img.shields.io/badge/LLM-DeepSeek%20%7C%20OpenAI%20%7C%20Claude%20%7C%20Ollama-orange" alt="Models" />
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
 </p>
 
 ---
 
-## 💡 为什么选择 AI Designer Studio？
+## 🇨🇳 简体中文
+
+### 💡 为什么选择 TDesign？
 
 以往使用 AI 生成界面，常常面临三大痛点：**“毛坯感严重”**（样式简陋难以直接作为正式方案）、**“黑盒不可控”**（稍作修改就会破坏整体页面）以及**“一次性孤岛”**（无法像 Figma 那样在全局画板中纵览与精细微调）。
 
-**AI Designer Studio** 专为解决这些问题而设计：
+**TDesign** 专为解决这些问题而设计：
 - 🚀 **一句话秒级成页**：输入日常业务语言，AI 即刻根据专业 UI 规范生成具备细腻层次、排版与微质感的高保真原型；
 - 🎨 **Figma 级别的无限多画框画板**：在同一张无限画布上同时构建登录、首页、详情、个人中心等整套完整用户旅程；
 - 🖱️ **所见即所得的可视化点选精修**：看哪不顺眼点哪里，直观调节边距、颜色、对齐与文字，无需手写一行代码；
@@ -30,21 +38,21 @@
 
 ---
 
-## ✨ 核心功能全景
+### ✨ 核心功能全景
 
-### 1. 🎨 无限多画框全景画板 (Infinite Canvas)
+#### 1. 🎨 无限多画框全景画板 (Infinite Canvas)
 - **多页面全局漫游**：支持在超大画板中任意平移（按住空格拖动或触控板双指滑动）与缩放（10%–400%），宏观把握整个产品业务动线；
 - **设备专属比例标尺**：创建工程时可选 **电脑端 (PC 1440px)** 或 **手机端 (Mobile 390px)**，杜绝错位变形；
 - **首屏折线视口指引**：画框高度随内容自然撑开，同时虚线标出真实设备首屏分界线（电脑 900px / 手机 844px），兼顾长图设计与真实屏幕首屏体验；
-- **智能防重叠与一键整理**：画框拖拽自动避让，点击顶栏「整理画框」可一键将所有页面整齐规范排版。
+- **智能防重叠与一键整理**：画框拖拽自动避让，点击顶栏「整理画板」可一键将所有页面整齐规范排版。
 
-### 2. 💬 懂设计的 AI 智能对话助手
-- **全主流模型自由接入**：预设支持 DeepSeek（含 R1 深度思考模型）、OpenAI (GPT-4o)、Anthropic Claude、Google Gemini、阿里百炼等，亦支持本地运行的 Ollama / vLLM；
+#### 2. 💬 懂设计的 AI 智能对话助手
+- **全主流模型自由接入**：预设支持 DeepSeek（含 R1 深度思考推理模型）、OpenAI (GPT-4o)、Anthropic Claude、Google Gemini、阿里百炼等，亦支持本地运行的 Ollama / vLLM；
 - **显式页面引用 (`@` 提到)**：在对话框输入 `@` 即可直接引用已有页面（如：“*参考 @登录页 的卡片阴影与配色，生成 @个人中心*”）；
 - **思考过程透明可见**：支持展开与折叠大模型的高阶推理链，生成状态与意图实时指示；
 - **一键置入对话**：在画框中选中任意按钮或卡片，点击「添加到对话」即可精准针对该元素进行专项 AI 调优。
 
-### 3. ⚖️ 方案并排比选 (Side-by-Side Adoption)
+#### 3. ⚖️ 方案并排比选 (Side-by-Side Adoption)
 - 当您让 AI “调整这个页面的风格”或“重新设计布局”时，系统绝不会粗暴覆盖您的现有成果；
 - 新方案将**自动平铺在原画框右侧**供您左右对比；
 - 浮动工具栏提供三大从容决策路径：
@@ -52,45 +60,48 @@
   - **两版都留**：保留新旧两张画框，便于与团队比对汇报或提供 A/B 方案；
   - **保留原版**：一键撤回新提案，原画框完好无损。
 
-### 4. 🎯 可视化属性检查器 (Inspector)
+#### 4. 🎯 可视化属性检查器 (Inspector)
 - **精准点选高亮**：鼠标轻移即展示悬浮框，点击画框内任意元素即可激活检查器面板；
-- **外边距与内边距 (Box Model)**：以专业盒模型图示呈现 Margin 与 Padding，支持纯数字输入、微调步进或 `auto` 居中；
+- **外边距与内边距 (Box Model)**：以专业盒模型图示呈现 Margin 与 Padding，支持纯数字输入、微调步进或 `auto` 居中，自动补齐标准 `px` 单位；
 - **Flex 排版直观调节**：水平/垂直排列、左右对齐、两端对齐、网格间隙 (Gap) 一键切换；
-- **安全行内编辑**：双击画框内的任意文本即可直接敲键盘修改文案（按 Enter 提交，Esc 取消），底层采用安全隔离引擎，绝不损坏原有组件与图标；
-- **结构级联安全删除**：选中容器或组件后按下键盘 `Delete` / `Backspace` 键，即可一键将该容器及其内部所有子孙节点完整干净移除，同步清除多余样式。
+- **安全行内编辑**：双击画框内的任意文本即可直接敲键盘修改文案（按 Enter 提交，Esc 取消），底层采用文本安全隔离引擎，绝不损坏原有组件与图标；
+- **结构级联安全删除**：选中容器或组件后按下键盘 `Delete` / `Backspace` 键，即可一键将该容器及其内部所有子孙节点完整干净移除，同步清除多余样式覆盖。
 
-### 5. 💎 统一设计系统与主题风格 (Design System & Tokens)
+#### 5. 💎 统一设计系统与主题风格 (Design System & Tokens)
 - **4 套工业级精调预设**：开箱即用科技蓝 (Tech Blue)、深冷灰 (Cool Slate)、数字紫 (Digital Violet) 与森林绿 (Forest Green)；
 - **一键切换明暗模式**：随时点击顶栏的「浅色 / 深色」按钮，画框内部所有颜色变量瞬间热重排，生成高保真暗黑模式界面；
 - **Token 合规率检测 (Token Lint)**：实时检测画框内是否存在破坏规范的生硬手写色值，支持一键将游离色值规范化映射回品牌 Token；
 - **工程设计记忆**：对话中达成的约定（如“*本工程所有主卡片必须具备 16px 圆角*”）将沉淀为工程规则，持续指导后续生成。
 
-### 6. 🖼️ 工程封面与资源中心 (Cover & Assets)
+#### 6. 🖼️ 工程封面与资源中心 (Cover & Assets)
 - **智能化工程卡片**：工程管理列表自动抓取首个画框的高清首屏作为封面预览，无画框时自动展示优雅字标；
 - **画框一键设为封面**：在画框标题栏选中任意满意页面，点击「设为封面」图标即可将其锁定为该工程的代表性缩略图；
 - **设计资产中心**：便捷插入精美矢量图标、高品质占位图片与预制组件。
 
-### 7. 📦 纯净无损交付与成果导出 (Export)
+#### 7. 📦 纯净无损交付与成果导出 (Export)
 - **纯净单页 HTML 导出**：
   - 一键导出的 HTML 为**自包含单文件**（内嵌所有必需样式与字体声明）；
   - 双击该 HTML 文件，在任意电脑的 Chrome、Safari 或 Edge 浏览器中都能丝滑打开交互演示；
-  - 导出时已自动剥离所有内部调试契约属性，代码干净规整，工程师可以直接参考或切图开发。
-- **超清 PNG 截图导出**：
-  - 支持 **1x / 2x / 3x** 超分辨率长图导出；
-  - 支持「导出完整滚动长图」或「仅截取设备首屏高度」，直接用于产品方案汇报与设计评审。
+  - 导出时已自动剥离所有内部调试契约属性（`data-nid` 等），代码干净规整，工程师可以直接参考或切图开发；
+  - 支持可选附带导出 Manifest 元数据侧车文件。
+- **双轨高保真 PNG 导出**：
+  - 桌面端优先走平台原生无头渲染器（WebKit PDF/快照），长图实测高度还原，绝不截断或大面积留白；
+  - 内联 SVG 转换杜绝嵌套子图片屏蔽，卡片排版永不塌陷；
+  - 支持 **1x / 2x / 3x** 物理像素矢量缩放，导出字迹线条锐利清晰；
+  - 支持「导出完整滚动长图」或「仅截取设备首屏高度」，直接用于产品汇报与设计评审。
 
 ---
 
-## 🚀 3 分钟快速上手
+### 🚀 3 分钟快速上手
 
-### 第一步：配置您的 AI 助手密钥
-1. 启动 AI Designer Studio；
+#### 第一步：配置您的 AI 助手密钥
+1. 启动 TDesign；
 2. 点击右上角或设置面板中的 **「AI 模型设置」**；
-3. 选择您常用的提供商（例如：**DeepSeek** 或 **阿里云百炼** 或 **OpenAI**）；
-4. 填入您的 API Key（数据仅加密保存在本地系统受控存储中），点击「测试连通性」确认连接成功。
+3. 选择您常用的提供商（例如：**DeepSeek**、**阿里云百炼** 或 **OpenAI**）；
+4. 填入您的 API Key（数据仅保存在本地受控存储中），点击「测试连通性」确认连接成功。
    > 💡 *如果您在本地运行了 Ollama，只需选择自定义端点并填入 `http://localhost:11434/v1` 即可零成本离线体验。*
 
-### 第二步：创建您的第一个设计工程
+#### 第二步：创建您的第一个设计工程
 1. 在首页点击 **「新建工程」**；
 2. 输入工程名称（如：“电商 App 核心流程”）；
 3. 选择设备类型：
@@ -98,7 +109,7 @@
    - 💻 **电脑端 (PC - 1440px)**：适合 Web 官网、SaaS 后台或桌面管理系统；
 4. 选择工程保存文件夹（工程将以文件夹形式完整沉淀在您的电脑中）。
 
-### 第三步：输入需求，见证创意生成
+#### 第三步：输入需求，见证创意生成
 点击右侧活动栏的 **AI 对话** 抽屉，在输入框中输入您的第一条设计构想，例如：
 > “*设计一个现代极简风格的企业 SaaS 登录页面，包含企业邮箱登录、密码输入框、微信扫码切换 Tab 以及底部服务协议。*”
 
@@ -106,9 +117,7 @@
 
 ---
 
-## 💡 常用提示词（Prompt）精选指南
-
-想让 AI 生成最贴合预期的设计？不妨参考以下提问技巧：
+### 💡 常用提示词（Prompt）精选指南
 
 | 目标场景 | 推荐提示词范例 |
 | :--- | :--- |
@@ -119,7 +128,7 @@
 
 ---
 
-## ⌨️ 常用快捷键速查表 (Cheat Sheet)
+### ⌨️ 常用快捷键速查表 (Cheat Sheet)
 
 | 按键操作 | 功能说明 | 适用场景 |
 | :--- | :--- | :--- |
@@ -137,16 +146,16 @@
 
 ---
 
-## 🔒 隐私与数据安全承诺
+### 🔒 隐私与数据安全承诺
 
-AI Designer Studio 秉承 **“本地优先 (Local-First)”** 理念：
+TDesign 秉承 **“本地优先 (Local-First)”** 理念：
 - **工程数据完全归属用户**：您的工程以开放规范的本地文件夹（包含 `project.json`、页面 `screens/*.html` 及 `assets/` 附件）存储在您指定的硬盘目录中；
 - **绝无云端数据回传**：除与您自行指定的 AI 服务商（如 DeepSeek、OpenAI）发送生成提示词外，本软件不向任何第三方服务器上传您的设计文档、画框内容或个人工程元数据；
 - **API 密钥本地加密**：您的模型密钥仅保存在本机操作系统的安全存储中，绝不离开您的设备。
 
 ---
 
-## ❓ 常见问题答疑 (FAQ)
+### ❓ 常见问题答疑 (FAQ)
 
 <details>
 <summary><strong>Q: 导出的单页 HTML 原型，发给客户或同事能在没有安装本软件的电脑上打开吗？</strong></summary>
@@ -174,15 +183,157 @@ AI Designer Studio 秉承 **“本地优先 (Local-First)”** 理念：
 
 ---
 
-## 👨‍💻 开发者与代码贡献者通道
+## 🇬🇧 English
 
-如果您是全栈工程师、开源贡献者，或希望深入了解系统的底层架构与代码实现：
-- 架构蓝图与 30 项技术决策（D1–D30）：请参阅 [产品需求文档 (`doc/prd.md`)](./doc/prd.md)；
-- 研发闭环标准、质量守门规范与避坑手册：请参阅 [智能体协作准则 (`AGENTS.md`)](./AGENTS.md)；
-- 全量特性索引与 53 套测试套件概览：请参阅 [系统技术文档中心 (`doc/README.md`)](./doc/README.md)。
+### 💡 Why TDesign?
+
+Traditional AI UI generators often suffer from three major pain points: **"Rough & Unfinished"** (crude outputs that can never be delivered directly to stakeholders), **"Black-Box & Uncontrollable"** (one tiny prompt tweak ruins the entire layout), and **"One-Off Silos"** (isolated single pages lacking the bird's-eye view and precision tuning of Figma).
+
+**TDesign** is built from the ground up to solve these challenges:
+- 🚀 **From Prompt to High-Fidelity in Seconds**: Express your product ideas in plain business language; TDesign instantly synthesizes polished, token-compliant interactive screens with professional hierarchy and micro-textures.
+- 🎨 **Figma-Grade Infinite Canvas**: Construct complete end-to-end user journeys (Sign-in, Dashboard, Details, Profile) side by side on an expansive infinite artboard.
+- 🖱️ **Point-and-Click Visual Precision**: Click any element on canvas to tweak spacing, colors, alignment, and typography without writing a single line of CSS.
+- ⚖️ **Side-by-Side Proposal Adoption**: When requesting AI adjustments, TDesign lays out before-and-after artboards side by side. Adopt, keep both, or discard with full control.
+- 🔒 **100% Local-First Data Sovereignty**: All projects live in your local file system (`*.aidesign` folder). Zero telemetry, zero cloud lock-in, and 100% offline ownership.
 
 ---
 
-## 📄 许可证
+### ✨ Features at a Glance
 
-本项目基于 [MIT License](./LICENSE) 开源发布。
+#### 1. 🎨 Infinite Artboard Canvas
+- **Fluid Pan & Zoom**: Pan freely (Hold Space + Drag or two-finger trackpad swipe) and zoom from 10% to 400% to keep the entire product architecture in sight.
+- **Dedicated Device Profiles**: Choose between **Desktop (PC 1440px)** or **Mobile (390px)** upon project creation to prevent layout distortion.
+- **Fold Line Viewport Guides**: Screen height expands naturally with content, overlaid with dashed lines indicating true fold lines (PC 900px / Mobile 844px).
+- **Collision Avoidance & Auto-Tidy**: Smooth dragging with intelligent collision avoidance; one-click "Tidy Up" neatly arranges all screens.
+
+#### 2. 💬 Design-Native AI Assistant
+- **Universal Provider Gateway**: Native presets for DeepSeek (including R1 reasoning), OpenAI (GPT-4o), Anthropic Claude, Google Gemini, and local LLMs via Ollama / vLLM.
+- **Explicit Screen References (`@` mentions)**: Type `@` to reference existing screens (e.g., "*Match the card shadows and palette of @Login to design @Profile*").
+- **Transparent Reasoning Chain**: Expand and inspect deep thinking steps with real-time status and intent classification.
+- **Add Element to Chat**: Select any button or container on the canvas and click "Add to Chat" for surgical AI refinements.
+
+#### 3. ⚖️ Side-by-Side Proposal Adoption
+- AI modifications never silently overwrite your existing satisfactory work.
+- New proposals appear side by side with the original artboard for instant visual comparison.
+- Three decisive actions:
+  - **Adopt New**: Replace the original screen with the new version (backed by automatic checkpoint and `Ctrl+Z` undo).
+  - **Keep Both**: Keep both screens for team review or A/B variant presentations.
+  - **Keep Original**: Discard the proposal; the original screen remains untouched.
+
+#### 4. 🎯 Visual Property Inspector
+- **Precise Element Selection**: Hover highlights and click-to-select with full DOM isolation.
+- **Interactive Box Model**: Visual margin and padding controls with numerical inputs, step buttons, `auto` centering, and automatic `px` unit sanitization.
+- **Flexbox & Grid Controls**: Toggle direction, alignment, justification, and gap with one click.
+- **Safe Inline Text Editing**: Double-click any text inside the screen to edit in place (Enter to commit, Esc to cancel), protected by DOM text isolation engines.
+- **Cascading Safe Deletion**: Press `Delete` or `Backspace` to cleanly remove the selected container and all nested children without leaving orphan DOM tags.
+
+#### 5. 💎 Design System & Token Presets
+- **4 Crafted Presets**: Tech Blue, Cool Slate, Digital Violet, and Forest Green.
+- **Instant Light / Dark Mode**: Toggle between light and dark modes with real-time CSS variable re-compilation.
+- **Token Lint Compliance**: Automated scanner detecting unstandardized colors with one-click token remediation.
+- **Project Design Memory**: Agreements reached in chat (e.g., "*All cards must use 16px border-radius*") persist as rules governing future generations.
+
+#### 6. 🖼️ Project Covers & Asset Hub
+- **Smart Project Cards**: Automatically captures the first screen's above-the-fold viewport as the project cover, with elegant fallback typography for empty projects.
+- **Set as Cover**: Select any screen and click "Set as Cover" to lock it as the project thumbnail.
+- **Asset Library**: Insert curated vector icons, high-resolution placeholder images, and reusable component blocks.
+
+#### 7. 📦 Pure & High-Fidelity Export
+- **Self-Contained Single-Page HTML**:
+  - Exports a clean, zero-dependency standalone `.html` file with all CSS variables and base stylesheets embedded.
+  - Double-click to open and demonstrate in Chrome, Safari, or Edge on any machine.
+  - Automatically strips internal attributes (`data-nid`), providing clean code ready for handoff.
+  - Optional sidecar metadata export (`.manifest.json`).
+- **Dual-Track High-Fidelity PNG Export**:
+  - Desktop-native headless renderer (WebKit PDF/snapshot) capturing true measured content height without truncation or bottom blank spaces.
+  - Inlined SVG conversion bypassing sub-resource sandbox blocks to eliminate card collapse.
+  - Native **1x / 2x / 3x** Retina resolution scaling for crisp typography and vector borders.
+  - Toggle between full-page scroll capture or fold-line viewport clipping.
+
+---
+
+### 🚀 Quick Start in 3 Minutes
+
+#### Step 1: Configure Your AI Provider
+1. Launch TDesign;
+2. Click **AI Settings** in the top-right corner;
+3. Choose your preferred provider (**DeepSeek**, **Aliyun DashScope**, **OpenAI**, etc.);
+4. Enter your API Key and click "Test Connection".
+   > 💡 *If using Ollama locally, select Custom Endpoint and enter `http://localhost:11434/v1`.*
+
+#### Step 2: Create Your First Project
+1. Click **New Project** on the home screen;
+2. Enter your project name (e.g., "E-Commerce Core Flow");
+3. Select your device profile:
+   - 📱 **Mobile (390px)**: iOS / Android prototypes;
+   - 💻 **Desktop (1440px)**: Web dashboards, SaaS consoles, or desktop apps;
+4. Select a local folder to store your project.
+
+#### Step 3: Prompt & Generate
+Open the **AI Chat** drawer on the right and type your design concept:
+> "*Design a minimalist SaaS login page with corporate email sign-in, password input, WeChat QR code tab switcher, and terms of service at the bottom.*"
+
+Hit Send, and watch TDesign construct your first screen on the canvas in real time!
+
+---
+
+### ⌨️ Keyboard Shortcuts (Cheat Sheet)
+
+| Shortcut | Description | Context |
+| :--- | :--- | :--- |
+| **Space + Left Click Drag** | Pan canvas freely | Global Canvas |
+| **Two-finger Trackpad Swipe** | Pan canvas in any direction | Global Canvas |
+| **Cmd / Ctrl + Mouse Wheel** | Smooth zoom centered on cursor (10% - 400%) | Global Canvas |
+| **Cmd / Ctrl + Z** | Undo last action (DOM, tokens, layout, deletes) | Workspace |
+| **Cmd / Ctrl + Shift + Z** | Redo next action | Workspace |
+| **Single Click Element** | Select node and open Property Inspector | Canvas Screen |
+| **Double Click Text** | Enter inline text editing mode | Canvas Screen |
+| **Enter** | Commit inline text edit | Text Editing |
+| **Esc** | Cancel inline text edit | Text Editing |
+| **Delete / Backspace** | Cascading delete of container and all children | Node Selected |
+| **Double Click Screen Title** | Rename screen in place | Screen Header |
+
+---
+
+### 🔒 Privacy & Security Commitment
+
+TDesign is strictly built around a **Local-First** philosophy:
+- **You Own Your Data**: Projects are stored as transparent local folders (containing `project.json`, `screens/*.html`, and `assets/`) on your drive.
+- **Zero Cloud Leakage**: Outside of sending your prompts to your designated AI providers (e.g. DeepSeek, OpenAI), TDesign never uploads your project files, canvas contents, or telemetry to any third-party server.
+- **Secure Local Storage**: API keys are securely stored on your local machine and never transmitted elsewhere.
+
+---
+
+### ❓ FAQ
+
+<details>
+<summary><strong>Q: Can exported standalone HTML files be opened on computers without TDesign installed?</strong></summary>
+<br>
+<strong>Yes, absolutely.</strong> Exported HTML files are 100% self-contained with all CSS variables, typography, and utility classes inlined. Anyone can double-click to view and interact in Chrome, Safari, or Edge without any dependencies.
+</details>
+
+<details>
+<summary><strong>Q: Why can't I switch between Desktop and Mobile profiles after creating a project?</strong></summary>
+<br>
+Professional UI/UX design is not merely resizing browser viewports. Desktop (multi-column layouts, hover states, 1440px flow) and Mobile (390px single-column flow, thumb zones, sticky bottom bars, safe area insets) require fundamentally different UX semantics. Locking the device profile ensures AI generation constraints remain rigid and robust. For multi-platform projects, creating separate Desktop and Mobile projects is recommended.
+</details>
+
+<details>
+<summary><strong>Q: What happens if I delete a card container?</strong></summary>
+<br>
+TDesign features a cascading deletion engine. Deleting a parent container cleanly removes all nested text, buttons, and icons from the DOM tree without leaving orphan tags, while simultaneously cleaning up orphaned CSS overrides. You can always press <code>Ctrl+Z</code> to undo immediately.
+</details>
+
+---
+
+## 👨‍💻 Developer & Contributor Guide
+
+If you are a full-stack engineer or open-source contributor interested in system architecture:
+- Architecture Blueprint & Decisions (D1–D34): See [Product Requirements Document (`doc/prd.md`)](./doc/prd.md);
+- Feature Specs & Test Suite Matrix: See [Documentation Index (`doc/README.md`)](./doc/README.md).
+
+---
+
+## 📄 License
+
+Distributed under the [MIT License](./LICENSE).

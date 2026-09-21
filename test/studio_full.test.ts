@@ -5,7 +5,7 @@ import { techBlueTheme } from '../src/utils/themePresets';
 import { PromptBuilder } from '../src/services/ai/promptBuilder';
 import { ImageGenerator } from '../src/utils/imageGenerator';
 
-describe('AI Designer Studio Core Engines', () => {
+describe('TDesign Core Engines', () => {
   describe('NidEngine (PRD §3.6.1 / D11)', () => {
     test('generateNid produces 8-char alphanumeric string', () => {
       const nid1 = NidEngine.generateNid();

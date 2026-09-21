@@ -2,9 +2,14 @@ import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
-import { NidEngine } from '../../utils/nidEngine';
-import { ArtifactManifest } from '../../types/project';
-import { Check, Copy, Download, FileCode, Image as ImageIcon, Loader2 } from 'lucide-react';
+import {
+  buildStandaloneHtml,
+  buildArtifactManifest,
+  downloadBlob,
+  downloadDataUrl
+} from '../../utils/exportRenderer';
+import { exportScreenPng, PngExportEngine } from '../../utils/pngExporter';
+import { Check, Copy, Download, FileCode, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react';
 
 interface ExportModalProps {
   onClose: () => void;
@@ -26,7 +31,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   const [exportType, setExportType] = useState<'html' | 'png'>('html');
   const [pngScale, setPngScale] = useState<1 | 2 | 3>(2);
   const [clipFirstScreen, setClipFirstScreen] = useState(false);
+  const [includeManifest, setIncludeManifest] = useState(false);
   const [isExportingPng, setIsExportingPng] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [lastEngine, setLastEngine] = useState<PngExportEngine | null>(null);
   const [copied, setCopied] = useState(false);
 
   const screen = screens[selectedScreenId];
@@ -46,60 +55,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
     })
     .join('\n');
 
-  const cleanBodyHtml = screen ? NidEngine.stripInternalAttributes(screen.htmlContent) : '';
-
-  const standaloneHtml = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${screen?.name || 'Exported Design'}</title>
-  <style>
-${tokensCss}
-
-${baseCss}
-
-${screenOverrides}
-  </style>
-</head>
-<body>
-${cleanBodyHtml}
-</body>
-</html>`;
+  const standaloneHtml = screen
+    ? buildStandaloneHtml(screen, { tokensCss, baseCss, screenOverrides })
+    : '';
 
   const handleDownloadHtml = () => {
-    // 1. Download HTML
-    const blob = new Blob([standaloneHtml], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${screen?.name || 'design'}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setExportError(null);
+    if (!screen) return;
 
-    // 2. Download sidecar manifest.json (BR-05.2 / T-OD-19)
-    if (screen) {
-      const manifest: ArtifactManifest = {
-        id: screen.id,
-        kind: 'screen',
-        renderer: 'html-iframe',
-        entry: `screens/${screen.id}.html`,
-        title: screen.name || screen.id,
-        device: settings.deviceProfile || 'pc',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        metadata: {
-          measuredHeight: screen.measuredHeight,
-          ...(screen.metadata || {})
-        }
-      };
-      const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
-      const manifestUrl = URL.createObjectURL(manifestBlob);
-      const manifestLink = document.createElement('a');
-      manifestLink.href = manifestUrl;
-      manifestLink.download = `${screen?.name || 'design'}.manifest.json`;
-      manifestLink.click();
-      URL.revokeObjectURL(manifestUrl);
+    // 1. 优先下载独立 HTML 文件 (BR-01 / ISSUE-024)
+    const blob = new Blob([standaloneHtml], { type: 'text/html;charset=utf-8' });
+    downloadBlob(blob, `${screen?.name || 'design'}.html`);
+
+    // 2. 若用户主动勾选附带侧车，延时调度触发第二项下载，防止 WKWebView 并发覆盖
+    if (includeManifest) {
+      setTimeout(() => {
+        const manifest = buildArtifactManifest(screen, settings);
+        const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+        downloadBlob(manifestBlob, `${screen?.name || 'design'}.manifest.json`);
+      }, 600);
     }
   };
 
@@ -109,58 +83,41 @@ ${cleanBodyHtml}
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // --- PNG Export using S3 Slicing & foreignObject Canvas (T-P2-05 / PRD §3.9.1) ---
+  // --- PNG 导出：原生渲染器优先，失败回退 foreignObject (doc/feature/high-fidelity-png-export) ---
   const handleExportPng = async () => {
     if (!screen) return;
     setIsExportingPng(true);
+    setExportError(null);
+    setExportNotice(null);
 
     try {
-      const w = settings.frameWidth;
-      const totalH = clipFirstScreen && settings.viewportGuideHeight ? settings.viewportGuideHeight : (screen.measuredHeight || 800);
+      const bgColor = settings.colorMode === 'light'
+        ? (designSystem.tokens.colors.background.light || '#ffffff')
+        : (designSystem.tokens.colors.background.dark || '#0f172a');
 
-      const canvas = document.createElement('canvas');
-      canvas.width = w * pngScale;
-      canvas.height = totalH * pngScale;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas context failed');
-
-      // Create SVG foreignObject image
-      const wrappedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${totalH}">
-        <foreignObject width="100%" height="100%">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="width: ${w}px; height: ${totalH}px; overflow: hidden;">
-            <style>${tokensCss} ${baseCss} ${screenOverrides}</style>
-            ${cleanBodyHtml}
-          </div>
-        </foreignObject>
-      </svg>`;
-
-      const svgBlob = new Blob([wrappedSvg], { type: 'image/svg+xml;charset=utf-8' });
-      const svgUrl = URL.createObjectURL(svgBlob);
-      const img = new Image();
-
-      await new Promise((resolve, reject) => {
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          URL.revokeObjectURL(svgUrl);
-          resolve(null);
-        };
-        img.onerror = () => {
-          // Fallback simple background render if foreignObject is blocked
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.font = '32px sans-serif';
-          ctx.fillStyle = '#2563eb';
-          ctx.fillText(`Design Export: ${screen.name}`, 80, 120);
-          resolve(null);
-        };
-        img.src = svgUrl;
+      const outcome = await exportScreenPng(screen, {
+        tokensCss,
+        baseCss,
+        screenOverrides,
+        width: settings.frameWidth,
+        clipToHeight: clipFirstScreen,
+        clipHeight: settings.viewportGuideHeight,
+        fallbackHeight: screen.measuredHeight || 800,
+        scale: pngScale,
+        bgColor
       });
 
-      const pngUrl = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = pngUrl;
-      a.download = `${screen.name}_${pngScale}x.png`;
-      a.click();
+      downloadDataUrl(outcome.dataUrl, `${screen.name || 'design'}_${pngScale}x.png`);
+
+      if (outcome.engine !== 'native-webview-pdf') {
+        setExportNotice(
+          `已使用兼容渲染导出（${outcome.fallbackReason || '原生渲染不可用'}）。桌面端原生渲染可获得更高保真度。`
+        );
+      }
+      setLastEngine(outcome.engine);
+    } catch (err: any) {
+      console.error('PNG export failed:', err);
+      setExportError(err?.message || 'PNG 渲染失败');
     } finally {
       setIsExportingPng(false);
     }
@@ -207,6 +164,36 @@ ${cleanBodyHtml}
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto text-xs">
+          {exportNotice && !exportError && (
+            <div className="p-3 bg-amber-950/50 border border-amber-800/70 rounded-xl text-xs text-amber-300 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>{exportNotice}</span>
+              </div>
+              <button
+                onClick={() => setExportNotice(null)}
+                className="text-amber-400 hover:text-amber-200 text-sm leading-none px-1"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {exportError && (
+            <div className="p-3 bg-red-950/60 border border-red-800/80 rounded-xl text-xs text-red-300 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{exportError}</span>
+              </div>
+              <button
+                onClick={() => setExportError(null)}
+                className="text-red-400 hover:text-red-200 text-sm leading-none px-1"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {/* Target Screen Selector */}
           <div className="flex items-center justify-between">
             <span className="text-slate-300 font-semibold">选择目标画框页面：</span>
@@ -246,6 +233,21 @@ ${cleanBodyHtml}
                   {standaloneHtml.slice(0, 1200)}
                   {standaloneHtml.length > 1200 && '\n... (后续代码已省略)'}
                 </pre>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeManifest}
+                    onChange={(e) => setIncludeManifest(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0 cursor-pointer"
+                  />
+                  <span>同时导出 Manifest 元数据侧车文件 ({screen?.name || 'design'}.manifest.json)</span>
+                </label>
+                <p className="text-[11px] text-slate-500 pl-5 pt-0.5">
+                  默认关闭。仅在需要携带画框尺寸与层级元数据再次导回本工具或设计系统解析时建议开启。
+                </p>
               </div>
             </>
           )}
@@ -299,10 +301,20 @@ ${cleanBodyHtml}
               </div>
 
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
-                <span className="font-semibold text-slate-300 block">光栅化切片保障 (S3 Spike Verified)</span>
+                <span className="font-semibold text-slate-300 block">渲染方式</span>
                 <p>
-                  输出尺寸: {settings.frameWidth * pngScale} × {((clipFirstScreen ? settings.viewportGuideHeight : (screen?.measuredHeight || 800)) * pngScale)}px
-                  。若像素面积超限将自动调用分块垂直切片拼接，杜绝清晰度失真与截断。
+                  桌面端由系统 WebView 整页渲染后栅格化，与画布所见一致；浏览器环境自动回退兼容渲染。
+                </p>
+                <p>
+                  输出宽度: {settings.frameWidth * pngScale}px ·
+                  {clipFirstScreen
+                    ? ` 高度按首屏参考线裁切 ${settings.viewportGuideHeight * pngScale}px`
+                    : ' 高度于导出时实测整页内容，不受画布缓存值影响'}
+                  {lastEngine && (
+                    <span className="text-slate-500">
+                      {' '}· 上次引擎: {lastEngine === 'native-webview-pdf' ? '原生整页渲染' : '兼容渲染'}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

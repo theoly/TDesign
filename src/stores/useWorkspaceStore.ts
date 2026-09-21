@@ -15,6 +15,13 @@ import { ProjectRepository, migrateProjectToFolder } from '../services/storage/p
 import { folderDisplayName, isDesktopRuntime, pickProjectFolder } from '../services/storage/folderPicker';
 import { useProjectStore } from './useProjectStore';
 import { useHistoryStore } from './useHistoryStore';
+import { HistoryRepository, readHistoryLocal } from '../services/storage/historyRepository';
+import {
+  flushHistorySave,
+  loadHistoryForProject,
+  resumeHistoryPersistence,
+  suspendHistoryPersistence
+} from '../services/storage/historyPersistence';
 
 /** 应用视图路由 (PRD §3.0 / D21)：启动先进工程管理页，选定工程后才进工作空间 */
 export type AppView = 'manager' | 'workspace';
@@ -22,9 +29,13 @@ export type AppView = 'manager' | 'workspace';
 /**
  * 撤销栈与 checkpoint 都是工程作用域的。切换工程时必须一并清空，
  * 否则撤销会把上一个工程的 patch 应用到当前工程上。
+ *
+ * 清空前先挂起落盘 (BR-HIS-04)：否则「旧栈已清空、新工程尚未载入」的中间态
+ * 会被写进某一方的归档文件，把历史抹平。挂起由 `loadHistoryForProject` 解除。
  */
 function resetHistory(): void {
-  useHistoryStore.setState({ past: [], future: [], checkpoints: [] });
+  suspendHistoryPersistence();
+  useHistoryStore.getState().restore(null);
 }
 
 export interface OpenLocalFolderResult {
@@ -98,7 +109,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     resetHistory();
     const ok = useProjectStore.getState().loadProjectDocument(doc, folderPath);
-    if (!ok) return { ok: false, message: '工程载入失败' };
+    if (!ok) {
+      resumeHistoryPersistence();
+      return { ok: false, message: '工程载入失败' };
+    }
+    // 恢复该工程上次会话遗留的撤销/重做栈 (BR-HIS-02)
+    await loadHistoryForProject(doc.id, folderPath);
 
     upsertMeta({
       id: doc.id,
@@ -136,6 +152,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return { ok: false, message: `迁移未完成，原数据未改动：${result.error ?? '未知错误'}` };
     }
 
+    // 历史归档随工程一并迁移，避免迁移后撤销栈凭空消失 (BR-HIS-01)
+    const localHistory = readHistoryLocal(id);
+    if (localHistory) {
+      await new HistoryRepository(storage, id)
+        .save(localHistory)
+        .catch((e) => console.warn('[history] 迁移归档失败', e));
+    }
+
     const meta = listProjects().find((p) => p.id === id);
     if (meta) upsertMeta({ ...meta, folderPath });
     get().refresh();
@@ -160,6 +184,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   createProject: (name, deviceProfile, designSystem, initialDecisions, folderPath) => {
     resetHistory();
     const id = useProjectStore.getState().initNewProject({ name, deviceProfile, designSystem, initialDecisions, folderPath });
+    // 新工程以空栈起步，立即恢复落盘
+    resumeHistoryPersistence();
     get().refresh();
     set({ activeProjectId: id, view: 'workspace' });
   },
@@ -181,7 +207,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         await repo.acquireLock();
         resetHistory();
         if (useProjectStore.getState().loadProjectDocument(doc, folderPath)) {
+          await loadHistoryForProject(id, folderPath);
           set({ activeProjectId: id, view: 'workspace', uncleanShutdownAt: uncleanAt });
+        } else {
+          resumeHistoryPersistence();
         }
       })();
       return true;
@@ -193,13 +222,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
     resetHistory();
     const ok = useProjectStore.getState().loadProjectById(id);
-    if (ok) set({ activeProjectId: id, view: 'workspace' });
+    if (ok) {
+      void loadHistoryForProject(id);
+      set({ activeProjectId: id, view: 'workspace' });
+    } else {
+      resumeHistoryPersistence();
+    }
     return ok;
   },
 
   backToManager: () => {
     const { id, folderPath } = useProjectStore.getState();
     useProjectStore.getState().saveProject();
+    // 正常关闭前把撤销栈同步落盘，下次打开可继续 undo/redo (BR-HIS-06)
+    flushHistorySave(id, folderPath);
     // 正常关闭：释放 lock，下次打开就不会报异常退出 (T-AE-44)
     if (folderPath) {
       void new ProjectRepository(createProjectStorage(id, folderPath))

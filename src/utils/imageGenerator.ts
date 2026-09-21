@@ -1,5 +1,5 @@
 /**
- * Procedural and API-assisted Image Generator for AI Designer Studio (PRD §3.4.1)
+ * Procedural and API-assisted Image Generator for TDesign (PRD §3.4.1)
  * Generates high-resolution data URLs with artistic themes, color harmony, and composition.
  */
 

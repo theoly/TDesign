@@ -12,6 +12,7 @@ import { ProjectManager } from './components/workspace/ProjectManager';
 import { RestylePanel } from './components/theme/RestylePanel';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
 import { useProjectStore } from './stores/useProjectStore';
+import { flushHistorySave } from './services/storage/historyPersistence';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 interface RecoveryBannerProps {
@@ -68,6 +69,16 @@ const Workspace: React.FC = () => {
   const [showAssetModal, setShowAssetModal] = useState(false);
   // T-AE-26/27: Polish 与 Restyle 共用同一面板——Polish 即队列只含一项的重塑
   const [restyleScope, setRestyleScope] = useState<'all' | string | null>(null);
+
+  // 关闭应用/刷新前把撤销栈同步落盘，下次打开工程可继续 undo/redo (BR-HIS-06)
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      const { id, folderPath } = useProjectStore.getState();
+      flushHistorySave(id, folderPath);
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   const handleOpenSettings = (tab?: 'provider' | 'quick_prompts') => {
     setSettingsTab(tab || 'provider');
@@ -142,7 +153,7 @@ export const App: React.FC = () => {
 
   return (
     <ErrorBoundary
-      fallbackTitle="AI Designer Studio 遇到非预期异常"
+      fallbackTitle="TDesign 遇到非预期异常"
       fallbackMessage="已拦截错误以保护工程数据安全，应用未崩溃。您可以尝试重置状态或刷新。"
       onReset={() => {
         useProjectStore.getState().selectNode(null);

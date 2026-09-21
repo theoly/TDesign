@@ -5,6 +5,7 @@ import { getBaseCss } from '../../styles/baseCss';
 import { NidEngine } from '../../utils/nidEngine';
 import { inspectText, setTextByNid } from '../../utils/textNode';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { handleHistoryShortcut } from '../../utils/historyShortcuts';
 import { resolveOverlapAfterManualMove, calculateDragSnap } from '../../utils/canvasLayout';
 import { captureScreenSnippetAsDataUrl } from '../../utils/screenCapture';
 import { Copy, Edit2, Smartphone, Monitor, Image as ImageIcon, Check } from 'lucide-react';
@@ -404,6 +405,9 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       };
 
       const onKeyDown = (ke: KeyboardEvent) => {
+        // iframe 内的键盘事件不冒泡到父文档，撤销/重做需在此转发 (BR-HIS-10)
+        if (handleHistoryShortcut(ke)) return;
+
         if ((ke.key === 'Delete' || ke.key === 'Backspace') && !ke.metaKey && !ke.ctrlKey) {
           const target = ke.target as HTMLElement | null;
           const isEditing = target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');

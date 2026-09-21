@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "AI Designer Studio",
+  "productName": "TDesign",
   "version": "1.0.0",
-  "identifier": "com.aidesigner.studio",
+  "identifier": "com.tdesign.studio",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "AI Designer Studio",
+        "title": "TDesign",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,

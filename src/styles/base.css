@@ -1,7 +1,9 @@
 /* ==========================================================================
-   AI Designer Studio - Token-Based Base Stylesheet (base.css)
-   Built purely on CSS variables. Zero literal colors or arbitrary hardcoded scales.
-   This file is injected into every design frame and can be evolved via AI dialogue.
+ * TDesign - Token-Based Base Stylesheet (base.css)
+ * 唯一权威源 (Single Source of Truth for Screen Styling)
+ * All components & frames inside the canvas MUST be styled using these classes or CSS variables.
+ * NO direct Tailwind classes allowed inside the rendered screen frames!
+ * This file is injected into every design frame and can be evolved via AI dialogue.
    ========================================================================== */
 
 /* 1. Reset & Box Model */

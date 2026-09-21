@@ -38,6 +38,7 @@ import {
   writeProject
 } from '../utils/projectRegistry';
 import { useHistoryStore, setApplyPatchesHandler } from './useHistoryStore';
+import { deleteHistoryArchive, scheduleHistorySave } from '../services/storage/historyPersistence';
 import { Patch } from '../types/history';
 import {
   calculateNewScreenPosition,
@@ -712,13 +713,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     const screen: Screen = { ...screenData, id, position, htmlContent };
     const prevScreens = get().screens;
+    const prevOrder = [...get().screenOrder];
 
-    // 历史变更记录：包含新画框添加，以及避让画框的位移
+    // 历史变更记录：新画框添加 + 序位 + 避让画框的位移 (BR-HIS-09)
     const forwardOps: Array<{ op: 'add' | 'replace'; path: string[]; value: any }> = [
-      { op: 'add', path: ['screens', id], value: screen }
+      { op: 'add', path: ['screens', id], value: screen },
+      { op: 'replace', path: ['screenOrder'], value: [...prevOrder, id] }
     ];
     const backwardOps: Array<{ op: 'remove' | 'replace'; path: string[]; value?: any }> = [
-      { op: 'remove', path: ['screens', id] }
+      { op: 'remove', path: ['screens', id] },
+      { op: 'replace', path: ['screenOrder'], value: prevOrder }
     ];
 
     for (const shift of shiftedScreens) {
@@ -909,10 +913,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const prevScreen = get().screens[id];
     if (!prevScreen) return;
 
+    const prevOrder = [...get().screenOrder];
     useHistoryStore.getState().commit(
       `删除画框: ${prevScreen.name}`,
-      [{ op: 'remove', path: ['screens', id] }],
-      [{ op: 'add', path: ['screens', id], value: prevScreen }]
+      [
+        { op: 'remove', path: ['screens', id] },
+        { op: 'replace', path: ['screenOrder'], value: prevOrder.filter((sid) => sid !== id) }
+      ],
+      [
+        { op: 'add', path: ['screens', id], value: prevScreen },
+        { op: 'replace', path: ['screenOrder'], value: prevOrder }
+      ]
     );
 
     set((state) => {
@@ -955,20 +966,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       state.settings.frameWidth,
       state.settings.viewportGuideHeight
     );
-    set((s) => {
-      const nextScreens = { ...s.screens };
-      for (const [id, pos] of Object.entries(newPositions)) {
-        if (nextScreens[id]) {
-          nextScreens[id] = { ...nextScreens[id], position: pos };
-        }
-      }
-      return { screens: nextScreens };
-    });
-    get().saveProject();
+    const originalPositions: Record<ScreenId, { x: number; y: number }> = {};
+    for (const id of Object.keys(newPositions)) {
+      const cur = state.screens[id];
+      if (cur?.position) originalPositions[id] = cur.position;
+    }
+    // 复用坐标批量更新链路，一并入栈 (BR-HIS-08)
+    get().updateScreenPositions(newPositions, '一键整理画框排布', originalPositions);
   },
 
   reorderScreens: (newOrder) => {
+    const prevOrder = [...get().screenOrder];
+    useHistoryStore.getState().commit(
+      '调整画框顺序',
+      [{ op: 'replace', path: ['screenOrder'], value: [...newOrder] }],
+      [{ op: 'replace', path: ['screenOrder'], value: prevOrder }]
+    );
     set({ screenOrder: newOrder });
+    get().saveProject();
   },
 
   setActiveScreen: (id) => {
@@ -1172,6 +1187,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       source: { kind: source?.kind ?? 'manual', conversationId: source?.conversationId, createdAt: Date.now() },
       active: true
     };
+    useHistoryStore.getState().commit(
+      `新增工程约定: ${text.slice(0, 16)}`,
+      [{ op: 'add', path: ['decisions', id], value: dec }],
+      [{ op: 'remove', path: ['decisions', id] }]
+    );
     set((state) => ({
       decisions: { ...state.decisions, [id]: dec }
     }));
@@ -1179,6 +1199,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   removeDecision: (id) => {
+    const prev = get().decisions[id];
+    if (!prev) return;
+    useHistoryStore.getState().commit(
+      `删除工程约定: ${prev.text.slice(0, 16)}`,
+      [{ op: 'remove', path: ['decisions', id] }],
+      [{ op: 'add', path: ['decisions', id], value: prev }]
+    );
     set((state) => {
       const next = { ...state.decisions };
       delete next[id];
@@ -1188,13 +1215,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   toggleDecision: (id) => {
-    set((state) => {
-      const cur = state.decisions[id];
-      if (!cur) return state;
-      return {
-        decisions: { ...state.decisions, [id]: { ...cur, active: !cur.active } }
-      };
-    });
+    const prev = get().decisions[id];
+    if (!prev) return;
+    const nextDec = { ...prev, active: !prev.active };
+    useHistoryStore.getState().commit(
+      `${nextDec.active ? '启用' : '停用'}工程约定: ${prev.text.slice(0, 16)}`,
+      [{ op: 'replace', path: ['decisions', id], value: nextDec }],
+      [{ op: 'replace', path: ['decisions', id], value: prev }]
+    );
+    set((state) => ({
+      decisions: { ...state.decisions, [id]: nextDec }
+    }));
     get().saveProject();
   },
 
@@ -1209,6 +1240,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
+    useHistoryStore.getState().commit(
+      `新建组件: ${name}`,
+      [{ op: 'add', path: ['components', id], value: comp }],
+      [{ op: 'remove', path: ['components', id] }]
+    );
     set((state) => ({
       components: { ...state.components, [id]: comp }
     }));
@@ -1290,20 +1326,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   updateComponent: (id, updates) => {
-    set((state) => {
-      const cur = state.components[id];
-      if (!cur) return state;
-      return {
-        components: {
-          ...state.components,
-          [id]: { ...cur, ...updates, updatedAt: Date.now() }
-        }
-      };
-    });
+    const prev = get().components[id];
+    if (!prev) return;
+    const nextComp = { ...prev, ...updates, updatedAt: Date.now() };
+    useHistoryStore.getState().commit(
+      `修改组件: ${prev.name}`,
+      [{ op: 'replace', path: ['components', id], value: nextComp }],
+      [{ op: 'replace', path: ['components', id], value: prev }]
+    );
+    set((state) => ({
+      components: { ...state.components, [id]: nextComp }
+    }));
     get().saveProject();
   },
 
   deleteComponent: (id) => {
+    const prev = get().components[id];
+    if (!prev) return;
+    useHistoryStore.getState().commit(
+      `删除组件: ${prev.name}`,
+      [{ op: 'remove', path: ['components', id] }],
+      [{ op: 'add', path: ['components', id], value: prev }]
+    );
     set((state) => {
       const next = { ...state.components };
       delete next[id];
@@ -1463,30 +1507,41 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   // Assets (PRD §3.4.1 / BR-IMG-03 去重复用)
   addAsset: (asset) => {
-    set((state) => {
-      const existingKey = Object.keys(state.assets).find(
-        (id) => state.assets[id].relPath === asset.relPath || id === asset.id
-      );
-      if (existingKey) {
-        const existing = state.assets[existingKey];
-        return {
-          assets: {
-            ...state.assets,
-            [existingKey]: {
-              ...existing,
-              refCount: (existing.refCount || 0) + 1
-            }
-          }
-        };
-      }
-      return {
-        assets: { ...state.assets, [asset.id]: asset }
-      };
-    });
+    const curAssets = get().assets;
+    const existingKey = Object.keys(curAssets).find(
+      (id) => curAssets[id].relPath === asset.relPath || id === asset.id
+    );
+
+    if (existingKey) {
+      // 已存在同一素材：仅增加引用计数，不作为可撤销的独立动作
+      const existing = curAssets[existingKey];
+      set((state) => ({
+        assets: {
+          ...state.assets,
+          [existingKey]: { ...existing, refCount: (existing.refCount || 0) + 1 }
+        }
+      }));
+      get().saveProject();
+      return;
+    }
+
+    useHistoryStore.getState().commit(
+      `新增素材: ${asset.name}`,
+      [{ op: 'add', path: ['assets', asset.id], value: asset }],
+      [{ op: 'remove', path: ['assets', asset.id] }]
+    );
+    set((state) => ({ assets: { ...state.assets, [asset.id]: asset } }));
     get().saveProject();
   },
 
   removeAsset: (id) => {
+    const prev = get().assets[id];
+    if (!prev) return;
+    useHistoryStore.getState().commit(
+      `删除素材: ${prev.name}`,
+      [{ op: 'remove', path: ['assets', id] }],
+      [{ op: 'add', path: ['assets', id], value: prev }]
+    );
     set((state) => {
       const next = { ...state.assets };
       delete next[id];
@@ -1549,6 +1604,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
 
     if (cleaned > 0) {
+      const removed = Object.keys(assets).filter((id) => !nextAssets[id]);
+      useHistoryStore.getState().commit(
+        `清理未使用素材 ${cleaned} 项`,
+        removed.map((id) => ({ op: 'remove' as const, path: ['assets', id] })),
+        removed.map((id) => ({ op: 'add' as const, path: ['assets', id], value: assets[id] }))
+      );
       set({ assets: nextAssets });
       get().saveProject();
     }
@@ -1637,6 +1698,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } else {
       writeProject(id, JSON.stringify(data));
     }
+
+    // 历史归档随工程一起落盘 (BR-HIS-06)
+    scheduleHistorySave(id, folderPath);
 
     // 同步注册表元信息，供工程管理页渲染卡片 (PRD §3.0.1)
     const firstScreenId = get().screenOrder[0];
@@ -1751,6 +1815,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   deleteProject: (id) => {
     deleteProjectData(id);
+    deleteHistoryArchive(id, get().id === id ? get().folderPath : undefined);
   },
 
   loadProject: (jsonString) => {
@@ -1800,6 +1865,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       let nextDesignSystem = state.designSystem;
       const nextDecisions = { ...state.decisions };
       const nextComponents = { ...state.components };
+      const nextAssets = { ...state.assets };
+      // screenOrder 补丁优先于 screens 增删推导出的顺序 (BR-HIS-09)
+      let orderOverride: ScreenId[] | null = null;
 
       for (const patch of patches) {
         const root = patch.path[0];
@@ -1842,6 +1910,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           } else if (patch.value) {
             nextComponents[key] = patch.value as ComponentDefinition;
           }
+        } else if (root === 'assets') {
+          if (patch.op === 'remove') {
+            delete nextAssets[key];
+          } else if (patch.value) {
+            nextAssets[key] = patch.value as Asset;
+          }
+        } else if (root === 'screenOrder') {
+          if (Array.isArray(patch.value)) {
+            orderOverride = [...(patch.value as ScreenId[])];
+          }
+        }
+      }
+
+      if (orderOverride) {
+        // 只保留仍然存在的画框，避免顺序数组残留幽灵 id
+        nextScreenOrder = orderOverride.filter((sid) => nextScreens[sid]);
+        for (const sid of Object.keys(nextScreens)) {
+          if (!nextScreenOrder.includes(sid)) nextScreenOrder.push(sid);
         }
       }
 
@@ -1851,7 +1937,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         overrides: nextOverrides,
         designSystem: nextDesignSystem,
         decisions: nextDecisions,
-        components: nextComponents
+        components: nextComponents,
+        assets: nextAssets
       };
     });
     get().saveProject();
