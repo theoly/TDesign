@@ -120,18 +120,21 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
 
       expect(call?.tool).toBe('modify_screen');
 
-      // 执行修改工具调用
+      // 执行修改工具调用 (BR-SSR-01: 暂存候选方案)
       const execResult = CanvasToolExecutor.execute(call!);
       expect(execResult.success).toBe(true);
-      expect(execResult.status).toBe('screen_modified');
+      expect(execResult.status).toBe('screen_staged');
       expect(execResult.checkpointId).toBeDefined();
 
       const store = useProjectStore.getState();
-      // 验证目标画框内容已被直接更新
-      expect(store.screens['screen-login'].htmlContent).toContain('新视觉登录');
-      // 画框总数保持为 2，绝不在画布上生成分离画框
-      expect(Object.keys(store.screens).length).toBe(2);
-      expect(store.stagedScreen).toBeNull();
+      expect(store.stagedScreen).not.toBeNull();
+      expect(store.stagedScreen?.targetScreenId).toBe('screen-login');
+
+      // 采纳新版后正式覆盖
+      store.adoptStagedChange();
+      const afterAdoptStore = useProjectStore.getState();
+      expect(afterAdoptStore.screens['screen-login'].htmlContent).toContain('新视觉登录');
+      expect(afterAdoptStore.stagedScreen).toBeNull();
     });
   });
 
@@ -221,9 +224,10 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
       });
 
       expect(res.success).toBe(true);
-      expect(res.status).toBe('screen_modified');
+      expect(res.status).toBe('screen_staged');
       expect(res.screenName).toBe('手机号验证码登录'); // 不被“画框”篡改
 
+      useProjectStore.getState().adoptStagedChange();
       const store = useProjectStore.getState();
       expect(store.screens['screen-login'].name).toBe('手机号验证码登录');
       expect(store.screens['screen-login'].htmlContent).toContain('新内容');

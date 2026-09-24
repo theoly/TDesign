@@ -137,7 +137,13 @@ You generate production-ready HTML and styles for web and mobile applications us
    - The project is currently rendering in ${(options.colorMode ?? 'light').toUpperCase()} mode.
    - The token values below are already resolved for ${(options.colorMode ?? 'light').toUpperCase()} mode. Do NOT infer a different mode from them.
    - NEVER hardcode a color literal. The user can toggle light/dark at any time, and the page MUST follow that toggle automatically.
-   - This only works if every color comes from var(--color-*) or a white-listed class. A literal such as background:#0b1020 permanently freezes the page in one mode and is a defect.`;
+   - This only works if every color comes from var(--color-*) or a white-listed class. A literal such as background:#0b1020 permanently freezes the page in one mode and is a defect.${
+     options.hasAttachment
+       ? `\n5. REFERENCE IMAGE FIDELITY:
+   - Faithfully reproduce visual warmth and palette (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft).
+   - For full-bleed headers, avoid artificial floating cards with bottom rounded corners.`
+       : ''
+   }`;
     sections.push({ id: 'role_core', content: roleContent });
 
     // 2. design_spec (BR-03 / REQ-OD-03)

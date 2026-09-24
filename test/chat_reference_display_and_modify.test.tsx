@@ -272,18 +272,30 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       });
 
       const afterState = useProjectStore.getState();
-      // 1. 目标画框内容已被直接更新
-      expect(afterState.screens[screenId].htmlContent).toContain('精准修改后设计');
-      // 2. 画布上绝无多余新画框创建，总数仍为 1
-      expect(Object.keys(afterState.screens).length).toBe(1);
-      // 3. 绝无侧边暂存画框
-      expect(afterState.stagedScreen).toBeNull();
+      // 1. 候选方案暂存比选 (BR-SSR-01)
+      expect(afterState.stagedScreen).not.toBeNull();
+      expect(afterState.stagedScreen?.targetScreenId).toBe(screenId);
+      expect(afterState.stagedScreen?.newHtml).toContain('精准修改后设计');
 
-      // 4. 对话助手卡片提示已更新画框，绝不误报“挂载至画板”
+      // 2. 气泡展示并排比选卡片，绝不误报“挂载至画板”
       const chatText = container.textContent || '';
-      expect(chatText).toContain('已更新画框「充值魔方点 (AI 方案)」');
-      expect(chatText).toContain('已就绪 (内容已覆盖更新)');
+      expect(chatText).toContain('新方案已在右侧画框并排就绪');
       expect(chatText).not.toContain('设计画框已挂载至画板');
+
+      // 3. 点击采纳新版，原画框正式更新
+      const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('采纳新版')
+      );
+      expect(adoptBtn).toBeDefined();
+
+      await act(async () => {
+        adoptBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      const finalState = useProjectStore.getState();
+      expect(finalState.screens[screenId].htmlContent).toContain('精准修改后设计');
+      expect(finalState.stagedScreen).toBeNull();
+      expect(Object.keys(finalState.screens).length).toBe(1);
     });
 
     test('CHK-F-07: toolResolver 精准支持带空格与括号的 @mention 画框名，且修改意图下绝不被泛词误判为新建', () => {
@@ -352,6 +364,15 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       });
 
       expect(callCount).toBe(1);
+      // 采纳新版候选方案 (BR-SSR-01)
+      const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('采纳新版')
+      );
+      expect(adoptBtn).toBeDefined();
+      await act(async () => {
+        adoptBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
       expect(useProjectStore.getState().screens[screenId].htmlContent).toContain('Run 1');
 
       // 查找并点击回退按钮
@@ -367,6 +388,11 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       // 验证：重新发起调整，且准确绑定原画框 ID
       expect(callCount).toBe(2);
       expect(retriedScreenId).toBe(screenId);
+      // Run 2 作为候选方案暂存供观测比选 (BR-SSR-01)
+      expect(useProjectStore.getState().stagedScreen?.newHtml).toContain('Run 2');
+
+      // 采纳 Run 2 候选方案
+      useProjectStore.getState().adoptStagedChange();
       expect(useProjectStore.getState().screens[screenId].htmlContent).toContain('Run 2');
     });
 

@@ -11,6 +11,7 @@ import { CanvasToolExecutor } from '../../../tools/canvasToolExecutor';
 import { resolveToolFromAIResponse } from '../../../tools/toolResolver';
 import { resolveApplyToolCall } from '../../../tools/applyTargetResolver';
 import { ScreenAuditReport } from '../../../../utils/tokenLint';
+import { NidEngine } from '../../../../utils/nidEngine';
 
 export interface ChatMessageItem {
   id: string;
@@ -553,6 +554,24 @@ export function useAIEngineChat() {
 
       if (output.status === 'rejected_by_guard') {
         setLastGuardOutput(output);
+        const currentScreens = useProjectStore.getState().screens;
+        const targetScreenId =
+          decision.targetScreenId ||
+          effectiveScreenId ||
+          (Object.keys(currentScreens).length > 0 ? Object.keys(currentScreens)[0] : null);
+        const targetScreen = targetScreenId ? currentScreens[targetScreenId] : null;
+        const screenTitle = targetScreen?.name || '目标画框';
+
+        if (targetScreenId && output.extractedHtml) {
+          const formattedHtml = NidEngine.injectNids(output.extractedHtml);
+          stageScreenChange(
+            targetScreenId,
+            formattedHtml,
+            `${screenTitle} (AI 方案候选)`
+          );
+          useProjectStore.getState().panToScreen(targetScreenId);
+        }
+
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantMsgId
@@ -563,7 +582,10 @@ export function useAIEngineChat() {
                   structureDiff: output.structureDiff,
                   isGuardRejected: true,
                   htmlOutput: output.extractedHtml,
-                  text: `⚠️ ${output.errorMessage}\n\n为保护已有布局不被误删，已自动拦截直接覆盖。若确认这是你的本意，可点击下方【强制应用】放行。`
+                  screenId: targetScreenId || undefined,
+                  screenName: screenTitle,
+                  toolAction: 'modified',
+                  text: `⚠️ ${output.errorMessage}\n\n已在原页面右侧并排展示新版方案供观测对比。若确认符合预期，可点击【采纳新版 (替换原版)】放行更新。`
                 }
               : m
           )
@@ -639,7 +661,7 @@ export function useAIEngineChat() {
 
       const defaultText =
         toolAction === 'modified'
-          ? `已按要求覆盖更新画框「${finalScreenName || '目标画框'}」。`
+          ? `已在右侧生成「${finalScreenName || '目标画框'}」的新版候选方案，请观测对比并选择替换或保留。`
           : toolAction === 'patched'
           ? `已对画框「${finalScreenName || '目标画框'}」局部节点完成针对性修改。`
           : '已根据指示生成高保真设计。';
@@ -715,7 +737,8 @@ export function useAIEngineChat() {
     msg: ChatMessageItem | undefined,
     htmlToApply: string,
     fallbackScreenId?: string | null,
-    createTitle?: string
+    createTitle?: string,
+    forceInPlace?: boolean
   ) => {
     const userPrompt = msg?.originalUserPrompt || '';
     const storeScreens = useProjectStore.getState().screens;
@@ -729,7 +752,7 @@ export function useAIEngineChat() {
       if (decided.action !== 'create_screen' && target) {
         return CanvasToolExecutor.execute({
           tool: 'modify_screen',
-          params: { screenId: target.id, title: target.name, html: htmlToApply }
+          params: { screenId: target.id, title: target.name, html: htmlToApply, forceInPlace }
         });
       }
       if (decided.action === 'create_screen') {
@@ -756,10 +779,54 @@ export function useAIEngineChat() {
       createTitle
     });
 
-    return toolCall ? CanvasToolExecutor.execute(toolCall) : null;
+    if (toolCall) {
+      if (toolCall.tool === 'modify_screen') {
+        return CanvasToolExecutor.execute({
+          ...toolCall,
+          params: { ...toolCall.params, forceInPlace }
+        });
+      }
+      return CanvasToolExecutor.execute(toolCall);
+    }
+    return null;
+  };
+
+  const handleAdoptCandidate = () => {
+    adoptStagedChange();
+    setLastGuardOutput(null);
+    setMessages((prev) =>
+      prev.map((msg) => ({
+        ...msg,
+        isGuardRejected: false,
+        structureDiff: undefined,
+        text: msg.text ? msg.text.replace('⚠️ 结构守卫拦截', '✅ 结构守卫已放行并应用') : msg.text
+      }))
+    );
+  };
+
+  const handleDiscardCandidate = () => {
+    discardStagedChange();
+    setLastGuardOutput(null);
+  };
+
+  const handleKeepBothCandidates = () => {
+    keepBothScreens();
+    setLastGuardOutput(null);
+    setMessages((prev) =>
+      prev.map((msg) => ({
+        ...msg,
+        isGuardRejected: false,
+        structureDiff: undefined
+      }))
+    );
   };
 
   const forceApply = (specificHtml?: string, msgId?: string) => {
+    if (useProjectStore.getState().stagedScreen) {
+      handleAdoptCandidate();
+      return;
+    }
+
     const sourceMsg = msgId
       ? messages.find((m) => m.id === msgId)
       : [...messages].reverse().find((m) => m.isGuardRejected);
@@ -768,7 +835,7 @@ export function useAIEngineChat() {
 
     const fallbackScreenId =
       activeScreenId || (Object.keys(screens).length > 0 ? Object.keys(screens)[0] : null);
-    const result = applyHtmlToTarget(sourceMsg, htmlToApply, fallbackScreenId);
+    const result = applyHtmlToTarget(sourceMsg, htmlToApply, fallbackScreenId, undefined, true);
 
     if (!result || !result.success) {
       if (!fallbackScreenId) return;
@@ -942,9 +1009,9 @@ export function useAIEngineChat() {
     confirmDecision,
     dismissDecision,
     resolveProposal,
-    adoptCandidate: adoptStagedChange,
-    discardCandidate: discardStagedChange,
-    keepBothCandidates: keepBothScreens,
+    adoptCandidate: handleAdoptCandidate,
+    discardCandidate: handleDiscardCandidate,
+    keepBothCandidates: handleKeepBothCandidates,
     postAuditMessage
   };
 }

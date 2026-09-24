@@ -77,7 +77,7 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
     expect(state.activeScreenId).toBe(res.screenId);
   });
 
-  it('CHK-CT-03: modify_screen 原地更新目标画框内容并记录检查点 (BR-CR-04)', () => {
+  it('CHK-CT-03: modify_screen 暂存候选新画框进入并排比选 (BR-SSR-01)，采纳后覆盖更新', () => {
     const createRes = CanvasToolExecutor.execute({
       tool: 'create_screen',
       params: { title: '原页面', html: '<main data-nid="root">原版</main>' }
@@ -95,14 +95,22 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
     });
 
     expect(modRes.success).toBe(true);
-    expect(modRes.status).toBe('screen_modified');
+    expect(modRes.status).toBe('screen_staged');
     expect(modRes.checkpointId).toBeDefined();
 
     const state = useProjectStore.getState();
-    // 目标画框内容直接更新
-    expect(state.screens[targetId].htmlContent).toContain('新版');
-    // 绝不残留或新增 stagedScreen
-    expect(state.stagedScreen).toBeNull();
+    // 原画框保持原版供观测对比
+    expect(state.screens[targetId].htmlContent).toContain('原版');
+    // 新方案进入 stagedScreen 并排展示
+    expect(state.stagedScreen).not.toBeNull();
+    expect(state.stagedScreen?.targetScreenId).toBe(targetId);
+    expect(state.stagedScreen?.newHtml).toContain('新版');
+
+    // 用户采纳后覆盖更新
+    useProjectStore.getState().adoptStagedChange();
+    const afterAdopt = useProjectStore.getState();
+    expect(afterAdopt.screens[targetId].htmlContent).toContain('新版');
+    expect(afterAdopt.stagedScreen).toBeNull();
   });
 
   it('CHK-CT-04: patch_element 局部外科手术式更新元素并记录检查点 (BR-CR-04)', () => {

@@ -193,23 +193,27 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
         })}
 
         {/* Staged Screen (Side-by-side D17 preview) */}
-        {stagedScreen && targetScreen && (
-          <ScreenFrame
-            key="staged-screen"
-            screen={{
-              id: 'staged-screen-preview',
-              name: stagedScreen.screenName,
-              position: {
-                x: targetScreen.position.x + (targetScreen.measuredHeight ? 1560 : 1560),
-                y: targetScreen.position.y
-              },
-              htmlContent: stagedScreen.newHtml,
-              measuredHeight: targetScreen.measuredHeight
-            }}
-            lodLevel={2}
-            isStaged={true}
-          />
-        )}
+        {stagedScreen && targetScreen && (() => {
+          const currentFrameWidth = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
+          const gapX = settings.deviceProfile === 'mobile' ? 40 : 60;
+          return (
+            <ScreenFrame
+              key="staged-screen"
+              screen={{
+                id: 'staged-screen-preview',
+                name: stagedScreen.screenName,
+                position: {
+                  x: targetScreen.position.x + currentFrameWidth + gapX,
+                  y: targetScreen.position.y
+                },
+                htmlContent: stagedScreen.newHtml,
+                measuredHeight: targetScreen.measuredHeight
+              }}
+              lodLevel={2}
+              isStaged={true}
+            />
+          );
+        })()}
 
         {/* 对齐吸附网格参考线 (BR-ALIGN-01 ~ BR-ALIGN-03) */}
         {activeSnapGuides && activeSnapGuides.active && (

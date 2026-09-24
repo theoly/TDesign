@@ -624,6 +624,8 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   return (
     <div
       ref={containerRef}
+      id={`screen-frame-${screen.id}`}
+      data-testid={`screen-frame-${screen.id}`}
       className="absolute select-none group"
       style={{
         left: `${screen.position.x}px`,

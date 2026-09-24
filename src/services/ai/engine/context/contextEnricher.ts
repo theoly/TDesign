@@ -169,27 +169,36 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
 You MUST thoroughly visually analyze the attached screenshot and reproduce its exact UI design, visual mood, layout hierarchy, and element structures into high-fidelity HTML:
 
 1. GLOBAL CANVAS & AMBIENT MOOD (全局氛围与背景):
-   - Check the overall background of the screenshot: Is it a warm peach/coral gradient, a pastel tint, or a brand atmosphere?
-   - If the screenshot has a colored or gradient background, DO NOT flatten it to stark white! Apply ambient background classes (.bg-ambient-warm, .bg-ambient-cool, or .bg-gradient-soft) or gradient styling to the outer container.
-   - If there are floating soft rounded elements, decorative squares or ambient blobs in the background, reproduce them using subtle background shapes.
+   - Background & Atmosphere: Carefully inspect the overall background of the screenshot. Is it a warm peach/cream/almond tint (e.g. #FFF9F0 or #FBF6EE), a cool slate tint, stark white, or dark?
+   - DO NOT flatten warm or colored backgrounds to stark white! Apply ambient background classes (.bg-ambient-warm, .bg-ambient-cool, or .bg-gradient-soft) or gradient styling to the outer container.
+   - Primary Gradient & Brand Palette: Detect the exact hue and gradient stops of the primary actions and headers (e.g. warm golden amber/orange gradient vs crimson vs tech blue). Ensure primary buttons, badges, and accents reflect the reference image's color warmth rather than defaulting to mismatched colors.
+   - If there are floating soft rounded elements, subtle glows, or ambient decorative shapes in the background, reproduce them using subtle background shapes.
 
 2. HERO SECTION VS. BOTTOM SHEET DECOUPLING (顶部平铺与底部卡片解耦):
-   - In the screenshot, if the top branding (app logo, app title, slogan, 3 feature cards) is displayed directly on the ambient background, DO NOT wrap the top area in an artificial card or border! Keep it directly on the canvas flow.
-   - If the lower section is a white bottom-sheet card with rounded top corners, wrap that entire lower section inside a cohesive container (e.g. .sheet-card or .card .r-xl with .p-6).
+   - Full-bleed Hero Integrity: If the top header (status bar, navigation, page title, hero illustration/badge) is displayed on a continuous colored or gradient background extending to the screen edges, DO NOT wrap the top area in an artificial floating card with bottom rounded corners! Keep it directly on the canvas flow (full width, no horizontal margins, no bottom radius).
+   - Bottom Overlap & Flow: If the lower section consists of cards or a bottom-sheet, list cards can naturally flow beneath or gently overlap the hero. If the screenshot has a white bottom-sheet card with rounded top corners, wrap that entire lower section inside a cohesive container (e.g. .sheet-card or .card .r-xl with .p-6).
 
 3. BUTTON PLACEMENT & IN-FLOW INTEGRITY (按钮位置与卡片流式对齐):
    - CRITICAL: Replicate the EXACT button placement shown in the screenshot!
-   - If the primary CTA button ("立即登录" / "提交") sits inside the form card above the social proof avatars, KEEP IT INSIDE THE FORM CARD!
-   - NEVER rip the button out into a fixed bottom bar (.cta-fixed) unless the screenshot explicitly shows a sticky floating bottom bar.
+   - Dual-state Button Styling:
+     * Inactive / Completed state: subtle muted pill button (e.g. "已认证" / "已完成" in soft neutral pill styling).
+     * Active Primary CTA: vibrant brand gradient button (e.g. "立即认证" / "提交") with appropriate visual prominence.
+   - If the primary CTA button sits inside a card or form, KEEP IT INSIDE THE CARD! NEVER rip the button out into a fixed bottom bar (.cta-fixed) unless the screenshot explicitly shows a sticky floating bottom bar.
 
 4. FORM MORPHOLOGY & INPUT DETAILS (输入框微形态与前缀):
-   - Replicate prefix elements like country code (+86 |) accurately inside the input container using an inline row with a vertical divider (.divider-v or text divider).
-   - Replicate inline action buttons (like "获取验证码" pill button) directly inside or alongside the input field.
-   - STRICT ANTI-HALLUCINATION: ONLY render icons that visibly exist in the screenshot. DO NOT invent or add arbitrary lock icons or decorations if they are absent in the screenshot!
+   - Corner Badges (Ribbons): For corner tags (e.g. "推荐完成", "热门", "官方") attached to the top-right corner of cards, position them flush against the card's top-right boundary inside parent .card (which has overflow:hidden) or using a dedicated ribbon layout.
+   - Secondary Notice Bars: For inline secondary notification strips (e.g. "你的资料已展示已认证金色徽章"), render a compact rounded container with subtle warm tint (.bg-warning-light or .bg-surface-alt) and an inline semantic icon.
+   - Replicate prefix elements like country code (+86 |) accurately inside the input container using an inline row with a vertical divider (.divider-v or text divider), and replicate inline action buttons directly inside or alongside the input field.
 
 5. FEATURE CARDS & SOCIAL PROOF (功能卡片与社交背书):
-   - If the screenshot has 3 feature cards in a row ("实名认证", "线下见面", "兴趣匹配"), render them side-by-side using .grid-3 .gap-2 or .row .gap-2 with .flex-1.
-   - Replicate social proof avatar clusters ("已有 12,860 位单身青年加入") using .avatar-group with .avatar and accompanying text.
+   - Multi-item Alignment: When feature cards, action pills, or options sit in a row, use .row .gap-2 .flex-1 or .grid-2 / .grid-3.
+   - Visual Balance: Balance left-hand icon badges (e.g. icon inside a soft rounded container .r-md with subtle background tint) against the main title, subtitle, and right-hand action.
+   - Replicate social proof elements or avatar clusters when present using .avatar-group with .avatar and accompanying text.
+
+6. STRICT ANTI-HALLUCINATION (严格语义抗幻觉与真实还原):
+   - STRICT ANTI-HALLUCINATION: ONLY render icons that visibly exist in the screenshot!
+   - NEVER invent cartoon smileys (☺) or arbitrary emojis when official verification badges, shields, checkmarks, or locks are shown! Use clean semantic SVG icons (<svg class="icon" ...>).
+   - Accurately preserve text hierarchy without unwanted line breaks on badges or titles.
 
 User Request: ${userPrompt}`;
   }

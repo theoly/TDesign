@@ -13,12 +13,13 @@ export type CanvasToolCall =
         referencedScreenId?: string;
       };
     }
-  | {
+    | {
       tool: 'modify_screen';
       params: {
         screenId: string;
         title?: string;
         html: string;
+        forceInPlace?: boolean;
       };
     }
   | {
@@ -123,7 +124,7 @@ export class CanvasToolExecutor {
         }
 
         case 'modify_screen': {
-          const { screenId, title, html } = call.params;
+          const { screenId, title, html, forceInPlace } = call.params;
           const target = store.screens[screenId];
           if (!target) {
             return {
@@ -147,26 +148,37 @@ export class CanvasToolExecutor {
             htmlContent: target.htmlContent
           });
 
-          // 直接原地更新目标画框内容 (BR-CR-04: 绝不生成分离候选画框)
-          store.updateScreenHtml(target.id, formattedHtml, `AI 修改页面: ${finalTitle}`);
-          if (title && title !== target.name && !isGenericTitle) {
-            store.renameScreen(target.id, title);
+          if (forceInPlace) {
+            store.updateScreenHtml(target.id, formattedHtml, `AI 修改页面: ${finalTitle}`);
+            if (title && title !== target.name && !isGenericTitle) {
+              store.renameScreen(target.id, title);
+            }
+            if (store.stagedScreen) {
+              store.discardStagedChange();
+            }
+            store.panToScreen(target.id);
+
+            return {
+              success: true,
+              tool: 'modify_screen',
+              status: 'screen_modified',
+              screenId: target.id,
+              screenName: finalTitle,
+              checkpointId
+            };
           }
 
-          // 清理可能存在的 staging
-          if (store.stagedScreen) {
-            store.discardStagedChange();
-          }
-
-          // 视口平移聚焦至已修改的目标画框
+          // D17 & BR-SSR-01: 页面修改统一在原画框右侧暂存候选新页面，供用户直观观测与比选替换
+          store.stageScreenChange(target.id, formattedHtml, `${finalTitle} (AI 调整候选)`);
           store.panToScreen(target.id);
 
           return {
             success: true,
             tool: 'modify_screen',
-            status: 'screen_modified',
+            status: 'screen_staged',
             screenId: target.id,
             screenName: finalTitle,
+            candidateHtml: formattedHtml,
             checkpointId
           };
         }

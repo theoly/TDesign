@@ -46,8 +46,10 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - STRUCTURE & APPBAR (STRICT LAYOUT CONTRACT):
   * Top navigation: When an app bar is needed, use .appbar (or .appbar .safe-top). Buttons and title inside .appbar MUST be strictly vertically centered (use .tap-target for back/close/actions, and a centered title like <span class="text-md font-semibold">标题</span>). For landing/login pages with an ambient hero banner, content can begin directly on the page background without an app bar.
   * BODY CONTAINMENT & NO OVERLAP: The page body must sit in its own container directly below .appbar. Body content MUST NEVER overlap with or slide under the .appbar. Never use negative margins (e.g. -mt-*) on elements below .appbar.
+  * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
   * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
-  * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!`;
+  * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!
+  * RIBBON BADGES & STATUS STRIPS: When cards have top-right corner badges (e.g. "推荐完成", "热门"), ensure they sit flush against the card's top-right corner. Notice bars inside cards use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.`;
 
 export function getDeviceAestheticRules(device: DeviceProfile): string {
   return device === 'pc' ? PC_RULES : MOBILE_RULES;

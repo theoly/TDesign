@@ -19,6 +19,7 @@ import {
   BookmarkPlus,
   Palette,
   Check,
+  Copy,
   AtSign,
   Image as ImageIcon,
   X,
@@ -530,33 +531,46 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         {/* Side-by-Side Floating / Inline Bar (D17) */}
         {stagedScreen && (
           <div className="p-3 bg-purple-950/50 border border-purple-800/60 rounded-xl space-y-2 text-purple-200 shadow-md">
-            <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-              <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>AI 新方案已在右侧画框并排就绪 (D17)</span>
+            <div className="flex items-center justify-between gap-1 border-b border-purple-900/40 pb-2">
+              <div className="flex items-center gap-1.5 font-semibold text-[11px] text-purple-200 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0" />
+                <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="truncate">AI 新方案候选已就绪</span>
+              </div>
+              <span className="shrink-0 text-[10px] font-medium text-purple-300 bg-purple-900/70 border border-purple-700/60 px-2 py-0.5 rounded-full whitespace-nowrap">
+                并排比选中
+              </span>
             </div>
             <p className="text-[11px] text-purple-300/90 leading-relaxed">
-              针对「{screens[stagedScreen.targetScreenId]?.name || '目标画框'}」生成了新版候选方案，请选择：
+              新方案已在右侧画框并排就绪，针对「{screens[stagedScreen.targetScreenId]?.name || '目标画框'}」请观测对比并选择：
             </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="space-y-1.5 pt-0.5">
               <button
+                type="button"
                 onClick={engine.adoptCandidate}
-                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-[10px] transition shadow"
+                className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap"
               >
-                采纳新版 (替换原版)
+                <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                <span>采纳新版 (替换原版)</span>
               </button>
-              <button
-                onClick={engine.keepBothCandidates}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] border border-slate-700 transition"
-              >
-                两版都留
-              </button>
-              <button
-                onClick={engine.discardCandidate}
-                className="px-2 py-1 text-slate-400 hover:text-red-400 text-[10px] transition"
-              >
-                保留原版
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={engine.keepBothCandidates}
+                  className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap"
+                >
+                  <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>两版都留</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={engine.discardCandidate}
+                  className="w-full px-2.5 py-1.5 bg-slate-900/60 hover:bg-red-950/40 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                >
+                  <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-400 shrink-0" />
+                  <span>保留原版</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -993,9 +1007,76 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       const isModified = m.toolAction === 'modified' || m.toolAction === 'patched';
                       const displayTitle = m.screenName || (mountedScreenId ? screens[mountedScreenId]?.name : '画框');
 
+                      const isStagedNow = Boolean(
+                        stagedScreen &&
+                          (stagedScreen.targetScreenId === m.screenId ||
+                            stagedScreen.newHtml === m.htmlOutput ||
+                            stagedScreen.targetScreenId === m.preActionSnapshot?.screenId)
+                      );
+
                       return (
                         <div className="space-y-2">
-                          {isMounted ? (
+                          {isStagedNow ? (
+                            <div className="space-y-2 p-2.5 bg-purple-950/40 border border-purple-800/60 rounded-xl text-purple-200 shadow-sm">
+                              <div className="flex items-center justify-between gap-1 border-b border-purple-900/40 pb-2">
+                                <div className="flex items-center gap-1.5 font-semibold text-[11px] text-purple-200 min-w-0">
+                                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0" />
+                                  <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                                  <span className="truncate">
+                                    {m.isGuardRejected
+                                      ? '结构守卫已拦截本次覆盖'
+                                      : 'AI 新方案候选已就绪'}
+                                  </span>
+                                </div>
+                                <span className="shrink-0 text-[10px] font-medium text-purple-300 bg-purple-900/70 border border-purple-700/60 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                  并排比选中
+                                </span>
+                              </div>
+                              {m.isGuardRejected && (
+                                <div className="text-[11px] text-amber-300/90 leading-relaxed bg-amber-950/40 border border-amber-800/50 p-2 rounded-lg flex items-start gap-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                  <span>⚠️ 结构守卫提醒：检测到节点变动较大，已在右侧呈现新方案供直观对比观测。</span>
+                                </div>
+                              )}
+                              <p className="text-[11px] text-purple-300/90 leading-relaxed">
+                                新方案已在右侧画框并排就绪，针对「{displayTitle}」请观测对比并选择：
+                              </p>
+                              <div className="space-y-1.5 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={engine.adoptCandidate}
+                                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                >
+                                  <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+                                  <span>
+                                    {m.isGuardRejected
+                                      ? '强制放行并覆盖更新原画框'
+                                      : '采纳新版 (替换原版)'}
+                                  </span>
+                                </button>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={engine.keepBothCandidates}
+                                    className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                    title="保留原画框，同时将新方案作为新画框添加到画板"
+                                  >
+                                    <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <span>两版都留</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={engine.discardCandidate}
+                                    className="w-full px-2.5 py-1.5 bg-slate-900/60 hover:bg-red-950/40 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                    title="放弃新方案，保留原画框不变"
+                                  >
+                                    <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-400 shrink-0" />
+                                    <span>保留原版</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : isMounted ? (
                             <div className="flex items-center justify-between">
                               {isModified ? (
                                 <div className="flex items-center gap-1.5 text-blue-400 font-medium text-[11px]">
@@ -1058,8 +1139,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           )}
                           <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono bg-slate-950/60 p-2 rounded-lg border border-slate-800">
                             <span>规格: {settings.frameWidth}px · {m.htmlOutput.length} 字符</span>
-                            {mountedScreenId && (
-                              <span className={isModified ? 'text-blue-400/90' : 'text-emerald-400/80'}>
+                            {isStagedNow ? (
+                              <span className="text-purple-400/90 font-sans">并排比选中</span>
+                            ) : mountedScreenId && (
+                              <span className={isModified ? 'text-blue-400/90 font-sans' : 'text-emerald-400/80 font-sans'}>
                                 {isModified ? '已就绪 (内容已覆盖更新)' : '已在画板就绪'}
                               </span>
                             )}

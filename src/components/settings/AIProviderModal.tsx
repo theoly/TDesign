@@ -257,7 +257,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -302,7 +302,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
           /* Content Layout */
           <div className="flex-1 flex overflow-hidden text-xs">
           {/* Provider Sidebar List */}
-          <div className="w-64 border-r border-slate-800 bg-slate-950 p-3 flex flex-col overflow-hidden">
+          <div className="w-72 border-r border-slate-800 bg-slate-950 p-3 flex flex-col overflow-hidden flex-shrink-0">
             <div className="flex items-center justify-between px-1 mb-2">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
                 Provider 厂商列表
@@ -310,10 +310,10 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
               <div className="relative">
                 <button
                   onClick={() => setShowAddMenu(!showAddMenu)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-medium text-[10px] border border-blue-500/30 transition"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-medium text-[11px] border border-blue-500/30 transition shrink-0"
                   title="添加第三方或自定义 Provider"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>添加第三方</span>
                 </button>
 
@@ -331,7 +331,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-[11px] text-blue-300">{p.name}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0 whitespace-nowrap">
                             {p.protocol === 'anthropic' ? 'Claude' : 'OpenAI'}
                           </span>
                         </div>
@@ -358,28 +358,30 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       setSelectedProviderId(prov.id);
                       setTestStatus({ testing: false });
                     }}
-                    className={`w-full text-left px-3 py-2 rounded-xl transition flex items-center justify-between group ${
+                    className={`w-full text-left px-3 py-2.5 rounded-xl transition flex items-center justify-between gap-2 group ${
                       isSelected
                         ? 'bg-blue-600 text-white font-medium shadow'
                         : 'text-slate-300 hover:bg-slate-850 hover:text-slate-100'
                     }`}
                   >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="truncate">{prov.name}</span>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span className="truncate text-xs">{prov.name}</span>
                       {prov.isCustom && (
                         <span
-                          className={`text-[9px] px-1 py-0.2 rounded font-mono ${
-                            isSelected ? 'bg-blue-700 text-blue-200' : 'bg-slate-800 text-slate-400'
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 whitespace-nowrap ${
+                            isSelected
+                              ? 'bg-blue-700 text-blue-100 border border-blue-400/30'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700/60'
                           }`}
                         >
                           第三方
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       {isCode && isChat ? (
                         <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap ${
                             isSelected ? 'bg-blue-700 text-white' : 'bg-blue-500/20 text-blue-300'
                           }`}
                           title="同时作为代码生成与对话推理主力"
@@ -390,7 +392,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                         <>
                           {isCode && (
                             <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap ${
                                 isSelected ? 'bg-blue-700 text-white' : 'bg-blue-500/20 text-blue-300'
                               }`}
                               title="页面代码生成档"
@@ -400,7 +402,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                           )}
                           {isChat && (
                             <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap ${
                                 isSelected ? 'bg-emerald-700 text-white' : 'bg-emerald-500/20 text-emerald-300'
                               }`}
                               title="对话与意图推理档"
@@ -412,7 +414,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       )}
                       {isVision && (
                         <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap ${
                             isSelected ? 'bg-purple-700 text-white' : 'bg-purple-500/20 text-purple-300'
                           }`}
                           title="视觉反推与参考图识别档"
@@ -420,7 +422,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                           Vision
                         </span>
                       )}
-                      {prov.apiKey && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                      {prov.apiKey && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
                     </div>
                   </button>
                 );
@@ -569,25 +571,32 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
             {curProvider ? (
               <>
                 {/* Header with Title, Role Assignment, and Delete Action */}
-                <div className="flex items-start justify-between pb-3 border-b border-slate-800">
-                  <div className="space-y-1 flex-1 mr-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
+                  <div className="space-y-1 min-w-0 flex-1">
                     {curProvider.isCustom ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                         <input
                           type="text"
                           value={curProvider.name}
                           onChange={(e) => updateProvider(curProvider.id, { name: e.target.value })}
-                          className="text-base font-bold text-slate-100 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 font-sans max-w-xs"
+                          className="text-base font-bold text-slate-100 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 font-sans w-full sm:w-auto sm:min-w-[200px] sm:max-w-xs shadow-sm"
                           placeholder="Provider 名称"
                         />
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium shrink-0 whitespace-nowrap">
                           自定义第三方
                         </span>
+                        <button
+                          onClick={() => handleDeleteProvider(curProvider.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/30 transition shrink-0 ml-1"
+                          title="删除该自定义 Provider"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <h3 className="text-base font-bold text-slate-100">{curProvider.name}</h3>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium shrink-0 whitespace-nowrap">
                           内置 Provider
                         </span>
                       </div>
@@ -597,24 +606,24 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+                  <div data-testid="header-role-actions" className="flex items-center gap-1.5 flex-wrap shrink-0 justify-start sm:justify-end">
                     {/* Code Model Assignment */}
                     {isCurCode ? (
                       <span
-                        className="px-2.5 py-1.5 rounded-xl bg-blue-500/20 text-blue-300 text-xs font-medium border border-blue-500/30 flex items-center gap-1 shadow-sm"
+                        className="px-2.5 py-1.5 rounded-xl bg-blue-500/20 text-blue-300 text-xs font-medium border border-blue-500/30 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
                         title="当前模型已作为页面代码生成档"
                       >
-                        <Check className="w-3.5 h-3.5 text-blue-400" />
+                        <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                         <span>代码生成档</span>
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsCode()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-blue-900/40 text-blue-300 hover:text-blue-200 text-xs font-medium border border-slate-700 hover:border-blue-500/40 transition flex items-center gap-1"
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-blue-900/40 text-blue-300 hover:text-blue-200 text-xs font-medium border border-slate-700 hover:border-blue-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title="将当前 Provider 与模型指派为页面代码生成档"
                       >
-                        <Code2 className="w-3.5 h-3.5 text-blue-400" />
+                        <Code2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                         <span>设为代码模型</span>
                       </button>
                     )}
@@ -622,20 +631,20 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     {/* Chat Model Assignment */}
                     {isCurChat ? (
                       <span
-                        className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium border border-emerald-500/30 flex items-center gap-1 shadow-sm"
+                        className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium border border-emerald-500/30 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
                         title="当前模型已作为对话与意图推理档"
                       >
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>对话推理档</span>
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsChat()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 hover:text-emerald-200 text-xs font-medium border border-slate-700 hover:border-emerald-500/40 transition flex items-center gap-1"
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 hover:text-emerald-200 text-xs font-medium border border-slate-700 hover:border-emerald-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title="将当前 Provider 与模型指派为对话与意图推理档"
                       >
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>设为对话模型</span>
                       </button>
                     )}
@@ -643,20 +652,20 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     {/* Vision Model Assignment */}
                     {isCurVision ? (
                       <span
-                        className="px-2.5 py-1.5 rounded-xl bg-purple-500/20 text-purple-300 text-xs font-medium border border-purple-500/30 flex items-center gap-1 shadow-sm"
+                        className="px-2.5 py-1.5 rounded-xl bg-purple-500/20 text-purple-300 text-xs font-medium border border-purple-500/30 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
                         title="当前模型已作为参考图视觉反推档"
                       >
-                        <Check className="w-3.5 h-3.5 text-purple-400" />
+                        <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                         <span>Vision 识图档</span>
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsVision()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-purple-900/40 text-purple-300 hover:text-purple-200 text-xs font-medium border border-slate-700 hover:border-purple-500/40 transition flex items-center gap-1"
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-purple-900/40 text-purple-300 hover:text-purple-200 text-xs font-medium border border-slate-700 hover:border-purple-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title="将当前 Provider 与模型指派为参考图视觉反推档"
                       >
-                        <Eye className="w-3.5 h-3.5 text-purple-400" />
+                        <Eye className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                         <span>设为 Vision 档</span>
                       </button>
                     )}
@@ -666,21 +675,11 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       <button
                         type="button"
                         onClick={() => handleSetAsBoth()}
-                        className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1"
+                        className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title="同时指派为代码生成与对话推理双主力"
                       >
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
                         <span>双选主力</span>
-                      </button>
-                    )}
-
-                    {curProvider.isCustom && (
-                      <button
-                        onClick={() => handleDeleteProvider(curProvider.id)}
-                        className="p-1.5 rounded-xl text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/30 transition ml-1"
-                        title="删除该自定义 Provider"
-                      >
-                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
                   </div>
@@ -783,13 +782,13 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
 
                 {/* Model ID Binding */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <label className="text-slate-300 font-semibold block">当前分配的模型 ID (Model ID)</label>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleSetAsCode()}
-                        className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 transition"
+                        className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 transition shrink-0 whitespace-nowrap"
                         title="将此输入框模型指派为页面代码生成档"
                       >
                         <Code2 className="w-3 h-3" />
@@ -798,7 +797,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       <button
                         type="button"
                         onClick={() => handleSetAsChat()}
-                        className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 transition"
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 transition shrink-0 whitespace-nowrap"
                         title="将此输入框模型指派为对话与推理档"
                       >
                         <MessageSquare className="w-3 h-3" />
@@ -807,7 +806,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       <button
                         type="button"
                         onClick={() => handleSetAsVision()}
-                        className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 transition"
+                        className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 transition shrink-0 whitespace-nowrap"
                         title="将此输入框模型指派为 Vision 档"
                       >
                         <Eye className="w-3 h-3" />
@@ -834,7 +833,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                         type="button"
                         onClick={handleDiscoverModels}
                         disabled={isDiscovering || (!curProvider?.apiKey && curProvider?.protocol !== 'ollama_native')}
-                        className="text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-40 flex items-center gap-1"
+                        className="text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-40 flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title="向该 Provider 接口重新拉取最新可用模型"
                       >
                         <RefreshCw className={`w-3 h-3 ${isDiscovering ? 'animate-spin' : ''}`} />
@@ -864,35 +863,35 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                             <button
                               type="button"
                               onClick={() => handleModelChange(mod.id)}
-                              className="px-2 py-1 flex items-center gap-1 text-left"
+                              className="px-2 py-1 flex items-center gap-1 text-left shrink-0 whitespace-nowrap"
                             >
                               <span>{mod.name || mod.id}</span>
                             </button>
 
                             {/* Assigned Role Badges */}
-                            <div className="flex items-center gap-0.5 pr-1">
+                            <div className="flex items-center gap-0.5 pr-1 shrink-0">
                               {isModelCode && (
-                                <span className="px-1 py-0.2 rounded text-[8px] bg-blue-500/20 text-blue-300 border border-blue-500/30 font-sans" title="当前代码生成档">
+                                <span className="px-1.5 py-0.5 rounded text-[8px] bg-blue-500/20 text-blue-300 border border-blue-500/30 font-sans shrink-0 whitespace-nowrap" title="当前代码生成档">
                                   代码
                                 </span>
                               )}
                               {isModelChat && (
-                                <span className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-sans" title="当前对话推理档">
+                                <span className="px-1.5 py-0.5 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-sans shrink-0 whitespace-nowrap" title="当前对话推理档">
                                   对话
                                 </span>
                               )}
                               {isModelVision && (
-                                <span className="px-1 py-0.2 rounded text-[8px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-sans" title="当前 Vision 识图档">
+                                <span className="px-1.5 py-0.5 rounded text-[8px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-sans shrink-0 whitespace-nowrap" title="当前 Vision 识图档">
                                   Vision
                                 </span>
                               )}
                             </div>
 
                             {/* Capability Badges */}
-                            <div className="flex items-center gap-0.5 pr-1 py-0.5">
+                            <div className="flex items-center gap-0.5 pr-1 py-0.5 shrink-0">
                               {hasVision && (
                                 <span
-                                  className="px-1 py-0.2 rounded text-[8px] bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-0.5 font-sans"
+                                  className="px-1.5 py-0.5 rounded text-[8px] bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-0.5 font-sans shrink-0 whitespace-nowrap"
                                   title="支持多模态视觉识图 (Vision)"
                                 >
                                   <Eye className="w-2.5 h-2.5" />
@@ -901,7 +900,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                               )}
                               {hasReasoning && (
                                 <span
-                                  className="px-1 py-0.2 rounded text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5 font-sans"
+                                  className="px-1.5 py-0.5 rounded text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5 font-sans shrink-0 whitespace-nowrap"
                                   title="支持深度思考推理 (Reasoner)"
                                 >
                                   <Brain className="w-2.5 h-2.5" />
@@ -910,7 +909,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                               )}
                               {hasCode && (
                                 <span
-                                  className="px-1 py-0.2 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5 font-sans"
+                                  className="px-1.5 py-0.5 rounded text-[8px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5 font-sans shrink-0 whitespace-nowrap"
                                   title="代码专精模型 (Code)"
                                 >
                                   <Code2 className="w-2.5 h-2.5" />
