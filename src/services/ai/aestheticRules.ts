@@ -34,7 +34,8 @@ const PC_RULES = `DEVICE RULES — PC (1440px):
 - Inputs are 40~44px tall (default .input height).
 - Grids: .grid-2 / .grid-3 / .grid-4 are all appropriate for dense information.
 - HOVER IS A CORE TEXTURE TOOL: use .card-hover on clickable cards, .row-hover on table rows, .link-hover on inline links.
-- Navigation: top bar and/or left sidebar.`;
+- Navigation: top bar and/or left sidebar.
+- SEMANTIC REGIONS: Decouple <aside class="sidebar">, .toolbar / .filter-bar, and <table>. Never emit white-on-white text.`;
 
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - SINGLE COLUMN ONLY for the main content vertical flow. Avoid wide data tables or heavy desktop grids; for compact feature cards, quick actions, or metric badges, 2 or 3 items side by side (.grid-2, .grid-3, or .row.gap-2 with .flex-1) are appropriate. For long lists of horizontal cards, use .scroll-x.
@@ -49,7 +50,8 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
   * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
   * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
   * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!
-  * RIBBON BADGES & STATUS STRIPS: When cards have top-right corner badges (e.g. "推荐完成", "热门"), ensure they sit flush against the card's top-right corner. Notice bars inside cards use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.`;
+  * RIBBON BADGES & STATUS STRIPS: When cards have top-right corner badges (e.g. "推荐完成", "热门"), ensure they sit flush against the card's top-right corner. Notice bars inside cards use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
+  * SEMANTIC REGION DECOUPLING: Status bar (.status-bar, 9:41/signals), navigation bar (.appbar, title/back), and hero marketing section (.hero-section, slogan/badges) MUST be rendered as decoupled semantic containers. Never fuse status bar and hero into a single indivisible container. Contrast rule: Never emit invisible white-on-white text when changing backgrounds!`;
 
 export function getDeviceAestheticRules(device: DeviceProfile): string {
   return device === 'pc' ? PC_RULES : MOBILE_RULES;

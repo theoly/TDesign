@@ -42,6 +42,92 @@ export interface EnrichedContextResult {
   designProse?: DesignProse;
 }
 
+export interface RegionTargetDefinition {
+  name: string;
+  keywords: string[];
+  scopeNotice: string;
+}
+
+export const MOBILE_REGION_TARGETS: RegionTargetDefinition[] = [
+  {
+    name: '系统状态栏 (Status Bar)',
+    keywords: ['系统栏', '状态栏', '信号栏', 'status bar', 'statusbar', 'system bar', '电量栏', '时间栏'],
+    scopeNotice: '仅限顶部 9:41 时间、电量、WiFi 信号所在容器 (.status-bar)。绝对不得外溢破坏或清除下方导航栏 (.appbar) 或 Hero 宣传区 (.hero-section) 的渐变大色块！'
+  },
+  {
+    name: '导航栏/标题栏 (App Bar)',
+    keywords: ['导航栏', '标题栏', 'appbar', 'navbar', 'app bar'],
+    scopeNotice: '仅限包含返回键、页面标题与胶囊按钮的标题栏容器 (.appbar)，严禁破坏 Hero 区或其他内容卡片。'
+  },
+  {
+    name: 'Hero 宣传区/大图 (Hero Section)',
+    keywords: ['hero', '宣传区', '头图', '大图', '大色块', '大渐变'],
+    scopeNotice: '仅限头部宣传 Slogan、勋章与插画展示区 (.hero-section)。'
+  },
+  {
+    name: '底部标签栏 (Tab Bar)',
+    keywords: ['tabbar', 'tab bar', '底部标签', '底部导航', '底导', '标签栏'],
+    scopeNotice: '仅限底部多标签导航切换栏 (.tabbar)。'
+  },
+  {
+    name: '底栏/吸底操作栏 (CTA Fixed Bar)',
+    keywords: ['吸底', '底栏', '底部按钮', 'cta-fixed', '固定底栏', '悬浮底栏', '底部操作'],
+    scopeNotice: '仅限底部悬浮主操作按钮容器 (.cta-fixed)。'
+  }
+];
+
+export const PC_REGION_TARGETS: RegionTargetDefinition[] = [
+  {
+    name: '侧边栏/导航菜单 (Sidebar)',
+    keywords: ['侧边栏', '左侧菜单', 'sidebar', '左侧导航', '菜单栏'],
+    scopeNotice: '仅限 <aside class="sidebar"> 及其内部子树，严禁外溢修改右侧主工作台或画布背景！'
+  },
+  {
+    name: '筛选栏/工具栏 (Toolbar)',
+    keywords: ['筛选栏', '工具栏', '查询栏', 'toolbar', 'filter bar', '搜索栏', '筛选区'],
+    scopeNotice: '仅限搜索框、下拉筛选与查询重置按钮所在的工具栏容器 (.toolbar / .filter-bar)，严禁破坏下方数据表格或外部大卡片背景！'
+  },
+  {
+    name: '数据表格 (Data Table)',
+    keywords: ['表格', '数据表格', 'table', '列表区', '数据网格'],
+    scopeNotice: '仅限 <table> 或表格容器 (.table-container)，严禁波及外部大卡片或筛选栏。'
+  },
+  {
+    name: '分页器 (Pagination)',
+    keywords: ['分页', '翻页', 'pagination'],
+    scopeNotice: '仅限底部页码、每页条数与跳页控件容器 (.pagination)。'
+  },
+  {
+    name: '页面头部/面包屑区 (Page Header)',
+    keywords: ['页面头部', '面包屑', 'page header', 'page-header', '标题区'],
+    scopeNotice: '仅限面包屑、页面主标题与操作按钮所在的头部容器 (.page-header)。'
+  },
+  {
+    name: '指标卡/统计看板 (Metric Cards)',
+    keywords: ['指标卡', '统计卡', 'kpi', '看板卡片', '概览卡片', 'metric'],
+    scopeNotice: '仅限顶部指标卡片网格，严禁改动全页其他卡片。'
+  }
+];
+
+export function detectRegionIsolationDirective(rawPrompt: string, deviceProfile: 'pc' | 'mobile'): string {
+  const promptLower = rawPrompt.toLowerCase();
+  const targets = deviceProfile === 'mobile'
+    ? [...MOBILE_REGION_TARGETS, ...PC_REGION_TARGETS]
+    : [...PC_REGION_TARGETS, ...MOBILE_REGION_TARGETS];
+
+  const matched = targets.filter((t) => t.keywords.some((kw) => promptLower.includes(kw)));
+  if (matched.length === 0) return '';
+
+  const matchedNotices = matched.map((m) => `- 目标「${m.name}」: ${m.scopeNotice}`).join('\n');
+
+  return `\n[专用语义区块修改与隔离守卫 (Universal Region Isolation Guard)]:
+检测到用户修改指令明确针对以下特定专用区块：
+${matchedNotices}
+【作用域单向隔离铁律】:
+1. 物理作用域隔离：修改范围严格约束在对应区块的独立语义容器内部，严禁外溢污染父级背景（例如：修改系统栏/状态栏背景绝对不得将下方 Hero 宣传区或整个 Header 的渐变大背景替换），若现有 DOM 尚未拆分独立子容器，请先拆分出独立容器生效；
+2. 对比度与反色联动铁律：调整任意区块背景（如深改浅、深色渐变改纯白、浅改深）时，必须同步重置内部所有文本、图标与分割线颜色！若背景变为浅色/纯白底，原反白文字 (.text-white, .text-inverse) 必须联动转为深色文字，严禁产生“白底白字”不可读缺陷！\n`;
+}
+
 export function enrichContext(params: ContextEnricherParams): EnrichedContextResult {
   const {
     rawPrompt,
@@ -209,6 +295,8 @@ User Request: ${userPrompt}`;
     Boolean(targetScreenId) &&
     Boolean(budgetResult.targetScreenHtml);
 
+  const regionDirective = detectRegionIsolationDirective(rawPrompt, deviceProfile);
+
   if (isTargetedScreenModification && targetScreenId) {
     const elementDirective = elementNid
       ? `\n[定向元素精准修改约束]: 用户明确引用了画框中 data-nid="${elementNid}" 的元素。请必须在完整输出该画框 HTML 时，重点对此节点进行精准设计与填充，严禁新建画框！除被修改元素外，其余已有布局结构和所有已有 data-nid 必须完整保留。\n`
@@ -218,10 +306,10 @@ User Request: ${userPrompt}`;
 \`\`\`html
 ${budgetResult.targetScreenHtml}
 \`\`\`
-${elementDirective}
+${elementDirective}${regionDirective}
 [重要修改约束]: 请在严格保留原有业务内容、文本和已有 data-nid 的基础上进行指定调整。必须且仅输出被 <artifact identifier="${targetScreenId}" type="screen" title="${targetName}"> 与 </artifact> 包裹的完整 HTML，严禁输出 identifier="screen_new"。\n\n${ARTIFACT_OUTPUT_REMINDER}\n\n用户修改需求: ${userPrompt}`;
   } else {
-    userPrompt = `${userPrompt}\n\n[指令约束: 适配当前 ${deviceProfile} 设备 (${frameWidth}px)，必须且仅输出被 <artifact identifier="screen_new" type="screen" title="贴切精简页面标题(不超过20字)"> 与 </artifact> 包裹的完整高保真页面，严禁在标签外输出寒暄或解释]\n\n${ARTIFACT_OUTPUT_REMINDER}`;
+    userPrompt = `${userPrompt}${regionDirective}\n\n[指令约束: 适配当前 ${deviceProfile} 设备 (${frameWidth}px)，必须且仅输出被 <artifact identifier="screen_new" type="screen" title="贴切精简页面标题(不超过20字)"> 与 </artifact> 包裹的完整高保真页面，严禁在标签外输出寒暄或解释]\n\n${ARTIFACT_OUTPUT_REMINDER}`;
   }
 
   // Inject referenced screen skeletons if any
